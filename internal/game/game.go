@@ -1,6 +1,9 @@
 package game
 
-import "github.com/antongollbo123/chicago-poker/internal/deck"
+import (
+	"github.com/antongollbo123/chicago-poker/internal/deck"
+	"github.com/antongollbo123/chicago-poker/internal/player"
+)
 
 type Stage string
 type Chicago bool
@@ -11,8 +14,10 @@ const (
 )
 
 type Game struct {
-	round int
-	stage Stage
+	deck    *deck.Deck
+	players []*player.Player
+	round   int
+	stage   Stage
 }
 
 func NewGame() (*Game, *deck.Deck) {
