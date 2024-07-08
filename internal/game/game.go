@@ -1,6 +1,8 @@
 package game
 
 import (
+	"sort"
+
 	"github.com/antongollbo123/chicago-poker/internal/deck"
 	"github.com/antongollbo123/chicago-poker/internal/player"
 )
@@ -31,7 +33,23 @@ func NewGame() *Game {
 	return &game
 }
 
-func (g *Game) CheckHand(p *player.Player) int {
+func (g *Game) TossCards(playerIndex int, indicesToRemove []int) {
+	if playerIndex < 0 || playerIndex >= len(g.Players) {
+		// Handle invalid player index
+		return
+	}
 
-	return 1
+	// Sort indicesToRemove in descending order to safely remove cards from hand slice
+	sort.Sort(sort.Reverse(sort.IntSlice(indicesToRemove)))
+
+	// Remove cards from player's hand based on indicesToRemove
+	for _, idx := range indicesToRemove {
+		if idx >= 0 && idx < len(g.Players[playerIndex].Hand) {
+			g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand[:idx], g.Players[playerIndex].Hand[idx+1:]...)
+		}
+	}
+
+	// Deal new cards from the deck
+	newCards := g.Deck.DrawMultiple(len(indicesToRemove))
+	g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
 }

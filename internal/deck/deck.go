@@ -41,3 +41,15 @@ func (d *Deck) Draw() (cards.Card, bool) {
 	d.cards = d.cards[1:]
 	return card, true
 }
+
+func (d *Deck) DrawMultiple(numCards int) []cards.Card {
+	drawnCards := make([]cards.Card, 0, numCards)
+	for i := 0; i < numCards; i++ {
+		card, ok := d.Draw()
+		if !ok {
+			break // Handle case where there are not enough cards left in the deck
+		}
+		drawnCards = append(drawnCards, card)
+	}
+	return drawnCards
+}

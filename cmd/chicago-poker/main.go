@@ -26,5 +26,9 @@ func main() {
 		fmt.Println(player.Name, player.Score, player.Hand)
 		fmt.Println("Player 1 score: ", game.EvaluateHand(p1.Hand))
 		fmt.Println("Player 2 score: ", game.EvaluateHand(p2.Hand))
+
+		gamet.TossCards(0, []int{0, 2, 4})
+
+		fmt.Println(p1.Hand)
 	}
 }
