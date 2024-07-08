@@ -14,18 +14,24 @@ const (
 )
 
 type Game struct {
-	deck    *deck.Deck
-	players []*player.Player
-	round   int
-	stage   Stage
+	Deck    *deck.Deck
+	Players []*player.Player
+	Round   int
+	Stage   Stage
 }
 
-func NewGame() (*Game, *deck.Deck) {
+func NewGame() *Game {
 	game := Game{}
-	game.round = 1
-	game.stage = Poker
+	game.Round = 1
+	game.Stage = Poker
 
 	deck := deck.NewDeck()
+	deck.Shuffle()
+	game.Deck = deck
+	return &game
+}
 
-	return &game, deck
+func (g *Game) CheckHand(p *player.Player) int {
+
+	return 1
 }
