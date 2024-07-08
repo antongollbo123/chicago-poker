@@ -7,7 +7,7 @@ const (
 	Spades   Suit = "♠"
 	Hearts   Suit = "♥"
 	Diamonds Suit = "♦"
-	Clubs    Suit = "♠"
+	Clubs    Suit = "♣"
 )
 
 const (
