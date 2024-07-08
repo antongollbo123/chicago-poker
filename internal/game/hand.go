@@ -20,6 +20,31 @@ const (
 	StraightFlush
 )
 
+func (hr HandRank) String() string {
+	switch hr {
+	case HighCard:
+		return "High Card"
+	case Pair:
+		return "Pair"
+	case TwoPair:
+		return "Two Pair"
+	case Triple:
+		return "Triple"
+	case Straight:
+		return "Straight"
+	case Flush:
+		return "Flush"
+	case FullHouse:
+		return "Full House"
+	case FourOfAKind:
+		return "Four of a Kind"
+	case StraightFlush:
+		return "Straight Flush"
+	default:
+		return "Unknown Hand Rank"
+	}
+}
+
 type HandEvaluation struct {
 	Rank  HandRank
 	Score int
@@ -111,3 +136,5 @@ func hasFullHouse(rankCounts map[cards.Rank]int) bool {
 	}
 	return hasThree && hasTwo
 }
+
+// TODO: Add functionality to evaluate two equal hands

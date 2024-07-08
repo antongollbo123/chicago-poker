@@ -8,7 +8,8 @@ import (
 )
 
 type Deck struct {
-	cards []cards.Card
+	cards    []cards.Card
+	NumCards int
 }
 
 func NewDeck() *Deck {
@@ -17,12 +18,15 @@ func NewDeck() *Deck {
 
 	var deck []cards.Card
 
+	cardCount := 0
+
 	for _, suit := range suits {
 		for _, rank := range ranks {
 			deck = append(deck, cards.NewCard(suit, rank))
+			cardCount++
 		}
 	}
-	return &Deck{cards: deck}
+	return &Deck{cards: deck, NumCards: cardCount}
 }
 
 func (d *Deck) Shuffle() {
@@ -38,7 +42,8 @@ func (d *Deck) Draw() (cards.Card, bool) {
 		return cards.Card{}, false
 	}
 	card := d.cards[0]
-	d.cards = d.cards[1:]
+	d.cards = d.cards[1:] // TODO: Add rest deck?
+	d.NumCards--
 	return card, true
 }
 
