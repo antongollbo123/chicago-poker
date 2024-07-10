@@ -46,8 +46,9 @@ func (hr HandRank) String() string {
 }
 
 type HandEvaluation struct {
-	Rank  HandRank
-	Score int
+	Rank       HandRank
+	Score      int
+	ScoreCards []cards.Card
 }
 
 func EvaluateHand(hand []cards.Card) HandEvaluation {
@@ -60,32 +61,39 @@ func EvaluateHand(hand []cards.Card) HandEvaluation {
 	}
 
 	isFlush := len(suitCounts) == 1
-	isStraight := isStraight(hand)
+	straightCards, isStraight := isStraight(hand)
 	switch {
 	case isStraight && isFlush:
-		return HandEvaluation{Rank: StraightFlush, Score: 8}
-	case hasNOfAKind(rankCounts, 4):
-		return HandEvaluation{Rank: FourOfAKind, Score: 7}
-	case hasFullHouse(rankCounts):
-		return HandEvaluation{Rank: FullHouse, Score: 6}
-	case isFlush:
-		return HandEvaluation{Rank: Flush, Score: 5}
-	case isStraight:
-		return HandEvaluation{Rank: Straight, Score: 4}
-	case hasNOfAKind(rankCounts, 3):
-		return HandEvaluation{Rank: Triple, Score: 3}
-	case hasTwoPair(rankCounts):
-		return HandEvaluation{Rank: TwoPair, Score: 2}
-	case hasNOfAKind(rankCounts, 2):
-		return HandEvaluation{Rank: Pair, Score: 1}
+		return HandEvaluation{Rank: StraightFlush, Score: 8, ScoreCards: straightCards}
 	default:
-		return HandEvaluation{Rank: HighCard, Score: 0}
+		if nOfAKindCards, ok := getNOfAKind(rankCounts, 4); ok {
+			return HandEvaluation{Rank: FourOfAKind, Score: 7, ScoreCards: nOfAKindCards}
+		}
+		if fullHouseCards, ok := getFullHouse(rankCounts, hand); ok {
+			return HandEvaluation{Rank: FullHouse, Score: 6, ScoreCards: fullHouseCards}
+		}
+		if isFlush {
+			return HandEvaluation{Rank: Flush, Score: 5, ScoreCards: hand}
+		}
+		if isStraight {
+			return HandEvaluation{Rank: Straight, Score: 4, ScoreCards: straightCards}
+		}
+		if nOfAKindCards, ok := getNOfAKind(rankCounts, 3); ok {
+			return HandEvaluation{Rank: Triple, Score: 3, ScoreCards: nOfAKindCards}
+		}
+		if twoPairCards, ok := getTwoPair(rankCounts, hand); ok {
+			return HandEvaluation{Rank: TwoPair, Score: 2, ScoreCards: twoPairCards}
+		}
+		if nOfAKindCards, ok := getNOfAKind(rankCounts, 2); ok {
+			return HandEvaluation{Rank: Pair, Score: 1, ScoreCards: nOfAKindCards}
+		}
 	}
+	return HandEvaluation{Rank: HighCard, Score: 0, ScoreCards: hand}
 }
 
-func isStraight(hand []cards.Card) bool {
+func isStraight(hand []cards.Card) ([]cards.Card, bool) {
 	if len(hand) < 5 {
-		return false
+		return nil, false
 	}
 	ranks := []int{}
 	rankMap := map[cards.Rank]int{
@@ -98,43 +106,100 @@ func isStraight(hand []cards.Card) bool {
 	sort.Ints(ranks)
 	for i := 0; i < len(ranks)-1; i++ {
 		if ranks[i+1] != ranks[i]+1 {
-			return false
+			return nil, false
 		}
 	}
-	return true
+	return hand, true
 }
 
-func hasNOfAKind(rankCounts map[cards.Rank]int, n int) bool {
-	for _, count := range rankCounts {
+func getNOfAKind(rankCounts map[cards.Rank]int, n int) ([]cards.Card, bool) {
+	for rank, count := range rankCounts {
 		if count == n {
-			return true
+			return []cards.Card{{Rank: rank}}, true
 		}
 	}
-	return false
+	return nil, false
 }
 
-func hasTwoPair(rankCounts map[cards.Rank]int) bool {
-	pairCount := 0
-	for _, count := range rankCounts {
+func getTwoPair(rankCounts map[cards.Rank]int, hand []cards.Card) ([]cards.Card, bool) {
+	pairs := []cards.Rank{}
+	for rank, count := range rankCounts {
 		if count == 2 {
-			pairCount++
+			pairs = append(pairs, rank)
 		}
 	}
-	return pairCount == 2
+	if len(pairs) == 2 {
+		pairCards := []cards.Card{}
+		for _, card := range hand {
+			if card.Rank == pairs[0] || card.Rank == pairs[1] {
+				pairCards = append(pairCards, card)
+			}
+		}
+		return pairCards, true
+	}
+	return nil, false
 }
 
-func hasFullHouse(rankCounts map[cards.Rank]int) bool {
+func getFullHouse(rankCounts map[cards.Rank]int, hand []cards.Card) ([]cards.Card, bool) {
+	var threeRank, twoRank cards.Rank
 	hasThree := false
 	hasTwo := false
-	for _, count := range rankCounts {
+	for rank, count := range rankCounts {
 		if count == 3 {
+			threeRank = rank
 			hasThree = true
 		}
 		if count == 2 {
+			twoRank = rank
 			hasTwo = true
 		}
 	}
-	return hasThree && hasTwo
+	if hasThree && hasTwo {
+		fullHouseCards := []cards.Card{}
+		for _, card := range hand {
+			if card.Rank == threeRank || card.Rank == twoRank {
+				fullHouseCards = append(fullHouseCards, card)
+			}
+		}
+		return fullHouseCards, true
+	}
+	return nil, false
+}
+
+func EvaluateTwoHands(hand1, hand2 []cards.Card) HandEvaluation {
+	hand1Eval := EvaluateHand(hand1)
+	hand2Eval := EvaluateHand(hand2)
+
+	if hand1Eval.Rank != hand2Eval.Rank {
+		if hand1Eval.Rank > hand2Eval.Rank {
+			return hand1Eval
+		}
+		return hand2Eval
+	}
+
+	switch hand1Eval.Rank {
+	case Pair, Triple:
+		if hand1Eval.ScoreCards[0] == hand2Eval.ScoreCards[0] {
+			compareHighCards(hand1, hand2)
+		}
+
+	}
+	return HandEvaluation{}
+}
+
+func compareHighCards(hand1, hand2 []cards.Card) []cards.Card {
+	sort.Slice(hand1, func(i, j int) bool { return hand1[i].Rank > hand1[j].Rank })
+	sort.Slice(hand2, func(i, j int) bool { return hand2[i].Rank > hand2[j].Rank })
+
+	for i := 0; i < len(hand1); i++ {
+		if hand1[i].Rank > hand2[i].Rank {
+			return hand1
+		} else if hand2[i].Rank > hand1[i].Rank {
+			return hand2
+		}
+	}
+
+	return hand1
 }
 
 // TODO: Add functionality to evaluate two equal hands

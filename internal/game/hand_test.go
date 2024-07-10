@@ -116,7 +116,7 @@ func TestEvaluateHand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := EvaluateHand(tt.hand)
-			if result != tt.expected {
+			if result.Rank != tt.expected.Rank && result.Score != tt.expected.Score {
 				t.Errorf("EvaluateHand(%v) = %v, want %v", tt.hand, result, tt.expected)
 			}
 		})
@@ -152,7 +152,7 @@ func TestIsStraight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			result := isStraight(tt.hand)
+			_, result := isStraight(tt.hand)
 			if result != tt.expected {
 				t.Errorf("isStraight(%v) = %v, want %v", tt.hand, result, tt.expected)
 			}
@@ -178,7 +178,7 @@ func TestHasNOfAKind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			result := hasNOfAKind(rankCounts, tt.n)
+			_, result := getNOfAKind(rankCounts, tt.n)
 			if result != tt.expected {
 				t.Errorf("hasNOfAKind(%v, %d) = %v, want %v", rankCounts, tt.n, result, tt.expected)
 			}
@@ -189,13 +189,22 @@ func TestHasNOfAKind(t *testing.T) {
 func TestHasTwoPair(t *testing.T) {
 	tests := []struct {
 		rankCounts map[cards.Rank]int
+		hand       []cards.Card
 		expected   bool
 	}{
 		{
+
 			rankCounts: map[cards.Rank]int{
 				cards.Two:   2,
 				cards.Three: 2,
 				cards.Four:  1,
+			},
+			hand: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Hearts, Rank: cards.Four},
 			},
 			expected: true,
 		},
@@ -204,6 +213,14 @@ func TestHasTwoPair(t *testing.T) {
 				cards.Two:   2,
 				cards.Three: 1,
 				cards.Four:  1,
+				cards.Five:  1,
+			},
+			hand: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Four},
+				{Suit: cards.Hearts, Rank: cards.Five},
 			},
 			expected: false,
 		},
@@ -211,7 +228,7 @@ func TestHasTwoPair(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			result := hasTwoPair(tt.rankCounts)
+			_, result := getTwoPair(tt.rankCounts, tt.hand)
 			if result != tt.expected {
 				t.Errorf("hasTwoPair(%v) = %v, want %v", tt.rankCounts, result, tt.expected)
 			}
@@ -222,12 +239,20 @@ func TestHasTwoPair(t *testing.T) {
 func TestHasFullHouse(t *testing.T) {
 	tests := []struct {
 		rankCounts map[cards.Rank]int
+		hand       []cards.Card
 		expected   bool
 	}{
 		{
 			rankCounts: map[cards.Rank]int{
 				cards.Two:   2,
 				cards.Three: 3,
+			},
+			hand: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Diamonds, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Hearts, Rank: cards.Three},
 			},
 			expected: true,
 		},
@@ -237,13 +262,20 @@ func TestHasFullHouse(t *testing.T) {
 				cards.Three: 3,
 				cards.Four:  1,
 			},
+			hand: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Four},
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Three},
+			},
 			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			result := hasFullHouse(tt.rankCounts)
+			_, result := getFullHouse(tt.rankCounts, tt.hand)
 			if result != tt.expected {
 				t.Errorf("hasFullHouse(%v) = %v, want %v", tt.rankCounts, result, tt.expected)
 			}
