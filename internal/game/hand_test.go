@@ -1,6 +1,8 @@
 package game
 
 import (
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/antongollbo123/chicago-poker/pkg/cards"
@@ -278,6 +280,72 @@ func TestHasFullHouse(t *testing.T) {
 			_, result := getFullHouse(tt.rankCounts, tt.hand)
 			if result != tt.expected {
 				t.Errorf("hasFullHouse(%v) = %v, want %v", tt.rankCounts, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEvaluteTwoHands(t *testing.T) {
+	tests := []struct {
+		hand1    []cards.Card
+		hand2    []cards.Card
+		expected []cards.Card
+	}{
+		{
+
+			hand1: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Six},
+			},
+			hand2: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Seven},
+			},
+			expected: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Seven},
+			},
+		},
+		{
+			hand1: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Two},
+				{Suit: cards.Spades, Rank: cards.Two},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Eight},
+			},
+			hand2: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Seven},
+			},
+			expected: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Seven},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			winningHand, winningHandEvaluation := EvaluateTwoHands(tt.hand1, tt.hand2)
+			sort.Slice(tt.expected, func(i, j int) bool { return tt.expected[i].Rank > tt.expected[j].Rank })
+			if !reflect.DeepEqual(winningHand, tt.expected) {
+				t.Errorf("EvaluateTwoHands(%v) = %v, want %v", winningHand, winningHandEvaluation, tt.expected)
 			}
 		})
 	}

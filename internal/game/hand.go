@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/antongollbo123/chicago-poker/pkg/cards"
@@ -45,10 +46,11 @@ func (hr HandRank) String() string {
 	}
 }
 
-type HandEvaluation struct {
+type HandEvaluation struct { // TODO: Rename to Hand ?
 	Rank       HandRank
 	Score      int
 	ScoreCards []cards.Card
+	// TODO: Add high card?
 }
 
 func EvaluateHand(hand []cards.Card) HandEvaluation {
@@ -166,40 +168,51 @@ func getFullHouse(rankCounts map[cards.Rank]int, hand []cards.Card) ([]cards.Car
 	return nil, false
 }
 
-func EvaluateTwoHands(hand1, hand2 []cards.Card) HandEvaluation {
+func EvaluateTwoHands(hand1, hand2 []cards.Card) ([]cards.Card, HandEvaluation) {
 	hand1Eval := EvaluateHand(hand1)
 	hand2Eval := EvaluateHand(hand2)
+	fmt.Println("HERE IS RANK FOR HAND1 RANK: ", hand1Eval.Rank, "HERE IS RANK FOR HAND2 RANK: ", hand2Eval.Rank)
 
+	// COMPARE RANKS; i.e. PAIR with PAIR, PAIR with TRIPLE etc.
 	if hand1Eval.Rank != hand2Eval.Rank {
 		if hand1Eval.Rank > hand2Eval.Rank {
-			return hand1Eval
+			return hand1, hand1Eval
+		} else if hand2Eval.Rank > hand1Eval.Rank {
+			return hand2, hand2Eval
 		}
-		return hand2Eval
 	}
 
-	switch hand1Eval.Rank {
-	case Pair, Triple:
-		if hand1Eval.ScoreCards[0] == hand2Eval.ScoreCards[0] {
-			compareHighCards(hand1, hand2)
-		}
-
-	}
-	return HandEvaluation{}
-}
-
-func compareHighCards(hand1, hand2 []cards.Card) []cards.Card {
 	sort.Slice(hand1, func(i, j int) bool { return hand1[i].Rank > hand1[j].Rank })
 	sort.Slice(hand2, func(i, j int) bool { return hand2[i].Rank > hand2[j].Rank })
 
-	for i := 0; i < len(hand1); i++ {
-		if hand1[i].Rank > hand2[i].Rank {
-			return hand1
-		} else if hand2[i].Rank > hand1[i].Rank {
-			return hand2
+	sort.Slice(hand1Eval.ScoreCards, func(i, j int) bool { return hand1Eval.ScoreCards[i].Rank > hand1Eval.ScoreCards[j].Rank })
+	sort.Slice(hand2Eval.ScoreCards, func(i, j int) bool { return hand2Eval.ScoreCards[i].Rank > hand2Eval.ScoreCards[j].Rank })
+
+	for i := 0; i < len(hand1Eval.ScoreCards); i++ {
+		fmt.Println(hand1Eval.ScoreCards[i].Rank, hand2Eval.ScoreCards[i].Rank)
+		if hand1Eval.ScoreCards[i].Rank > hand2Eval.ScoreCards[i].Rank {
+			return hand1, hand1Eval
+		} else if hand1Eval.ScoreCards[i].Rank < hand2Eval.ScoreCards[i].Rank {
+			return hand2, hand2Eval
 		}
 	}
 
-	return hand1
+	for i := 0; i < len(hand1); i++ {
+		fmt.Println(hand1[i].Rank, hand2[i].Rank)
+		if hand1[i].Rank > hand2[i].Rank {
+			return hand1, hand1Eval
+		} else if hand1[i].Rank < hand2[i].Rank {
+			return hand2, hand2Eval
+		} else {
+			compareRank(hand1, hand2)
+		}
+	}
+	return nil, HandEvaluation{}
+}
+
+func compareRank(hand1, hand2 []cards.Card) []cards.Card {
+	fmt.Println(("NOT YET IMPLEMENTED :)"))
+	return []cards.Card{}
 }
 
 // TODO: Add functionality to evaluate two equal hands
