@@ -181,13 +181,11 @@ func EvaluateTwoHands(hand1, hand2 []cards.Card) ([]cards.Card, HandEvaluation) 
 			return hand2, hand2Eval
 		}
 	}
+	hand1Eval.ScoreCards = sortCards(hand1Eval.ScoreCards)
+	hand2Eval.ScoreCards = sortCards(hand2Eval.ScoreCards)
 
-	sort.Slice(hand1, func(i, j int) bool { return hand1[i].Rank > hand1[j].Rank })
-	sort.Slice(hand2, func(i, j int) bool { return hand2[i].Rank > hand2[j].Rank })
-
-	sort.Slice(hand1Eval.ScoreCards, func(i, j int) bool { return hand1Eval.ScoreCards[i].Rank > hand1Eval.ScoreCards[j].Rank })
-	sort.Slice(hand2Eval.ScoreCards, func(i, j int) bool { return hand2Eval.ScoreCards[i].Rank > hand2Eval.ScoreCards[j].Rank })
-
+	hand1 = sortCards(hand1)
+	hand2 = sortCards(hand2)
 	for i := 0; i < len(hand1Eval.ScoreCards); i++ {
 		fmt.Println(hand1Eval.ScoreCards[i].Rank, hand2Eval.ScoreCards[i].Rank)
 		if hand1Eval.ScoreCards[i].Rank > hand2Eval.ScoreCards[i].Rank {
@@ -210,8 +208,16 @@ func EvaluateTwoHands(hand1, hand2 []cards.Card) ([]cards.Card, HandEvaluation) 
 	return nil, HandEvaluation{}
 }
 
+func sortCards(cards []cards.Card) []cards.Card {
+	sort.Slice(cards, func(i, j int) bool {
+		return cards[i].Rank > cards[j].Rank
+	})
+	return cards
+}
+
 func compareRank(hand1, hand2 []cards.Card) []cards.Card {
 	fmt.Println(("NOT YET IMPLEMENTED :)"))
+	fmt.Println(hand1[0].Suit, cards.SuitValue(string(hand1[0].Suit)))
 	return []cards.Card{}
 }
 

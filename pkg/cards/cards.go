@@ -4,8 +4,8 @@ type Suit string
 type Rank string
 
 const (
-	Spades   Suit = "♠"
 	Hearts   Suit = "♥"
+	Spades   Suit = "♠"
 	Diamonds Suit = "♦"
 	Clubs    Suit = "♣"
 )
@@ -34,4 +34,19 @@ type Card struct {
 // NewCard creates a new card with the given suit and rank
 func NewCard(suit Suit, rank Rank) Card {
 	return Card{Suit: suit, Rank: rank}
+}
+
+func SuitValue(suit string) int {
+	switch suit {
+	case "♥":
+		return 4
+	case "♠":
+		return 3
+	case "♦":
+		return 2
+	case "♣":
+		return 1
+	default:
+		return 0
+	}
 }

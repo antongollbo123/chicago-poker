@@ -2,7 +2,6 @@ package game
 
 import (
 	"reflect"
-	"sort"
 	"testing"
 
 	"github.com/antongollbo123/chicago-poker/pkg/cards"
@@ -338,14 +337,37 @@ func TestEvaluteTwoHands(t *testing.T) {
 				{Suit: cards.Hearts, Rank: cards.Seven},
 			},
 		},
+		{
+			hand1: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Eight},
+			},
+			hand2: []cards.Card{
+				{Suit: cards.Diamonds, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Eight},
+			},
+			expected: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Five},
+				{Suit: cards.Hearts, Rank: cards.Eight},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			winningHand, winningHandEvaluation := EvaluateTwoHands(tt.hand1, tt.hand2)
-			sort.Slice(tt.expected, func(i, j int) bool { return tt.expected[i].Rank > tt.expected[j].Rank })
+			expectedSorted := sortCards(tt.expected)
 			if !reflect.DeepEqual(winningHand, tt.expected) {
-				t.Errorf("EvaluateTwoHands(%v) = %v, want %v", winningHand, winningHandEvaluation, tt.expected)
+				t.Errorf("EvaluateTwoHands(%v) = %v, want %v", winningHand, winningHandEvaluation, expectedSorted)
 			}
 		})
 	}
