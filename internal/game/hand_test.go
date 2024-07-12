@@ -380,12 +380,35 @@ func TestEvaluteTwoHands(t *testing.T) {
 				{Suit: cards.Hearts, Rank: cards.Eight},
 			},
 		},
+		{
+			hand1: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Five},
+				{Suit: cards.Clubs, Rank: cards.Four},
+				{Suit: cards.Hearts, Rank: cards.Four},
+			},
+			hand2: []cards.Card{
+				{Suit: cards.Diamonds, Rank: cards.Four},
+				{Suit: cards.Spades, Rank: cards.Four},
+				{Suit: cards.Clubs, Rank: cards.Five},
+				{Suit: cards.Clubs, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Three},
+			}, // This comparison is in reality impossible, since we cannot have
+			expected: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Three},
+				{Suit: cards.Spades, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Five},
+				{Suit: cards.Clubs, Rank: cards.Four},
+				{Suit: cards.Hearts, Rank: cards.Four},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
 			winningHand, winningHandEvaluation := EvaluateTwoHands(tt.hand1, tt.hand2)
-			expectedSorted := sortCards(tt.expected)
+			expectedSorted := sortCards(sortSuit(tt.expected))
 			if !reflect.DeepEqual(winningHand, tt.expected) {
 				t.Errorf("EvaluateTwoHands(%v) = %v, want %v", winningHand, winningHandEvaluation, expectedSorted)
 			}
