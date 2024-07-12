@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"reflect"
 	"sort"
 
 	"github.com/antongollbo123/chicago-poker/internal/deck"
@@ -110,17 +111,25 @@ func (g *Game) EvaluateHands() {
 	bestScore := -1
 	bestPlayerIndex := -1
 
-	for i, player := range g.Players {
-		handEvaluation := EvaluateHand(player.Hand)
-		fmt.Printf("Player %d has a %v with a score of %d\n", i+1, handEvaluation.Rank, handEvaluation.Score)
-		if handEvaluation.Score > bestScore {
-			bestScore = handEvaluation.Score
+	for i := 0; i < len(g.Players)-1; i++ {
+
+		winningHand, winningHandEvaluation := EvaluateTwoHands(g.Players[i].Hand, g.Players[i+1].Hand)
+
+		if reflect.DeepEqual(winningHand, g.Players[i].Hand) {
+			bestScore = winningHandEvaluation.Score
 			bestPlayerIndex = i
+			fmt.Printf("Player %s has a %v of %v with a score of %d\n", g.Players[i].Name, winningHandEvaluation.Rank, winningHandEvaluation.ScoreCards, winningHandEvaluation.Score)
+			g.Players[i].Score += winningHandEvaluation.Score
+		} else if reflect.DeepEqual(winningHand, g.Players[i+1].Hand) {
+			bestScore = winningHandEvaluation.Score
+			bestPlayerIndex = i + 1
+			fmt.Printf("Player %s has a %v of %v with a score of %d\n", g.Players[i+1].Name, winningHandEvaluation.Rank, winningHandEvaluation.ScoreCards, winningHandEvaluation.Score)
+			g.Players[i+1].Score += winningHandEvaluation.Score
 		}
 	}
 
 	if bestPlayerIndex != -1 {
 		g.Players[bestPlayerIndex].Score += bestScore
-		fmt.Printf("Player %d wins the round and gets %d points\n", bestPlayerIndex+1, bestScore)
+		fmt.Printf("Player %s wins the round and gets %d points\n", g.Players[bestPlayerIndex].Name, bestScore)
 	}
 }

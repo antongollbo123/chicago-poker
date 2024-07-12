@@ -176,6 +176,8 @@ func EvaluateTwoHands(hand1, hand2 []cards.Card) ([]cards.Card, HandEvaluation) 
 	hand1 = sortCards(hand1)
 	hand2 = sortCards(hand2)
 
+	sortedHand := sortCards(hand2)
+	fmt.Println(hand1, hand2, sortedHand)
 	for i := 0; i < len(hand1Eval.ScoreCards); i++ {
 		if hand1Eval.ScoreCards[i].Rank > hand2Eval.ScoreCards[i].Rank {
 			return hand1, hand1Eval

@@ -394,13 +394,36 @@ func TestEvaluteTwoHands(t *testing.T) {
 				{Suit: cards.Clubs, Rank: cards.Five},
 				{Suit: cards.Clubs, Rank: cards.Three},
 				{Suit: cards.Diamonds, Rank: cards.Three},
-			}, // This comparison is in reality impossible, since we cannot have
+			},
 			expected: []cards.Card{
 				{Suit: cards.Hearts, Rank: cards.Three},
 				{Suit: cards.Spades, Rank: cards.Three},
 				{Suit: cards.Diamonds, Rank: cards.Five},
 				{Suit: cards.Clubs, Rank: cards.Four},
 				{Suit: cards.Hearts, Rank: cards.Four},
+			},
+		},
+		{
+			hand1: []cards.Card{
+				{Suit: cards.Hearts, Rank: cards.Six},
+				{Suit: cards.Spades, Rank: cards.Six},
+				{Suit: cards.Diamonds, Rank: cards.Five},
+				{Suit: cards.Clubs, Rank: cards.Three},
+				{Suit: cards.Hearts, Rank: cards.Four},
+			},
+			hand2: []cards.Card{
+				{Suit: cards.Diamonds, Rank: cards.Ten},
+				{Suit: cards.Spades, Rank: cards.Ten},
+				{Suit: cards.Clubs, Rank: cards.Five},
+				{Suit: cards.Clubs, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
+			},
+			expected: []cards.Card{
+				{Suit: cards.Diamonds, Rank: cards.Ten},
+				{Suit: cards.Spades, Rank: cards.Ten},
+				{Suit: cards.Clubs, Rank: cards.Five},
+				{Suit: cards.Clubs, Rank: cards.Three},
+				{Suit: cards.Diamonds, Rank: cards.Four},
 			},
 		},
 	}
