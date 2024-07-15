@@ -233,3 +233,15 @@ func compareSuit(hand1, hand2 []cards.Card) []cards.Card {
 	}
 	return nil
 }
+
+type ConditionFunc func(cards.Card) bool
+
+func filterCards(cardList []cards.Card, condition ConditionFunc) []cards.Card {
+	var result []cards.Card
+	for _, card := range cardList {
+		if condition(card) {
+
+		}
+	}
+	return result
+}

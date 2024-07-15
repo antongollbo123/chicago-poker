@@ -9,6 +9,7 @@ import (
 
 	"github.com/antongollbo123/chicago-poker/internal/deck"
 	"github.com/antongollbo123/chicago-poker/internal/player"
+	"github.com/antongollbo123/chicago-poker/pkg/cards"
 )
 
 type Stage string
@@ -17,6 +18,10 @@ type Chicago bool
 const (
 	Poker Stage = "Poker"
 	Trick Stage = "Trick"
+)
+
+const (
+	TrickWin int = 3
 )
 
 type Game struct {
@@ -29,7 +34,7 @@ type Game struct {
 func NewGame(players []*player.Player) *Game {
 	game := Game{}
 	game.Round = 0
-	game.Stage = Poker
+	game.Stage = Trick // Change back to poker
 	game.Players = players
 	deck := deck.NewDeck()
 	deck.Shuffle()
@@ -60,15 +65,11 @@ func (g *Game) TossCards(playerIndex int, indicesToRemove []int) {
 			g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand[:idx], g.Players[playerIndex].Hand[idx+1:]...)
 		}
 	}
-
-	// Deal new cards from the deck
-	newCards := g.Deck.DrawMultiple(len(indicesToRemove))
-	g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
 }
 
 func (g *Game) StartGame() {
 
-	for g.Stage != Trick {
+	for {
 		switch g.Stage {
 		case Poker:
 			g.PokerRound()
@@ -79,6 +80,7 @@ func (g *Game) StartGame() {
 	}
 
 }
+
 func (g *Game) PokerRound() {
 	fmt.Println("Starting Poker Round: ", g.Round+1)
 	scanner := bufio.NewScanner(os.Stdin)
@@ -90,6 +92,10 @@ func (g *Game) PokerRound() {
 		indicesToRemove := ParseInput(input)
 		fmt.Printf("Player %s is tossing cards: %v\n", player.Name, indicesToRemove)
 		g.TossCards(i, indicesToRemove)
+		// Deal new cards from the deck
+		newCards := g.Deck.DrawMultiple(len(indicesToRemove))
+		g.Players[i].Hand = append(g.Players[i].Hand, newCards...)
+
 		fmt.Printf("Player %s has new hand: %v\n", player.Name, player.Hand)
 	}
 	g.EvaluateHands()
@@ -103,33 +109,66 @@ func (g *Game) PokerRound() {
 }
 
 func (g *Game) TrickRound() {
-	//TODO: Add logic for trick round, exit condition should be if all players cards are empty
-	fmt.Println("Trick round not yet implemented.")
+	fmt.Println("TRICK ROUND!")
+	scanner := bufio.NewScanner(os.Stdin)
+
+	var handCopies []cards.Card
+
+	var playedCard cards.Card
+
+	for _, player := range g.Players {
+		handCopies = append(handCopies, player.Hand...)
+
+	}
+	for i, player := range g.Players {
+		fmt.Printf("Player %s, your hand is: %v\n", player.Name, player.Hand)
+		fmt.Printf("Enter the index of the card you want to play: ")
+		scanner.Scan()
+		input := scanner.Text()
+		// TODO: Create copies of players hands ?
+		//trickHand := g.Players[i].Hand
+		indexToPlay := ParseInput(input)
+		fmt.Println(playedCard == (cards.Card{}))
+		if indexToPlay[0] < len(g.Players[i].Hand) && i == 0 {
+			playedCard := g.Players[i].Hand[indexToPlay[0]]
+			g.TossCards(i, indexToPlay)
+			fmt.Println(playedCard, g.Players[i].Hand)
+		} else {
+
+			lastSuit := playedCard.Suit
+			condition := func(c cards.Card) bool {
+				return c.Suit == lastSuit
+			}
+
+			filteredCards := filterCards(g.Players[i].Hand, condition)
+			fmt.Println(filteredCards)
+
+		}
+	}
 }
 
 func (g *Game) EvaluateHands() {
 	bestScore := -1
 	bestPlayerIndex := -1
-
+	var bestHandEvaluation HandEvaluation
 	for i := 0; i < len(g.Players)-1; i++ {
-
-		winningHand, winningHandEvaluation := EvaluateTwoHands(g.Players[i].Hand, g.Players[i+1].Hand)
-
-		if reflect.DeepEqual(winningHand, g.Players[i].Hand) {
-			bestScore = winningHandEvaluation.Score
-			bestPlayerIndex = i
-			fmt.Printf("Player %s has a %v of %v with a score of %d\n", g.Players[i].Name, winningHandEvaluation.Rank, winningHandEvaluation.ScoreCards, winningHandEvaluation.Score)
-			g.Players[i].Score += winningHandEvaluation.Score
-		} else if reflect.DeepEqual(winningHand, g.Players[i+1].Hand) {
-			bestScore = winningHandEvaluation.Score
-			bestPlayerIndex = i + 1
-			fmt.Printf("Player %s has a %v of %v with a score of %d\n", g.Players[i+1].Name, winningHandEvaluation.Rank, winningHandEvaluation.ScoreCards, winningHandEvaluation.Score)
-			g.Players[i+1].Score += winningHandEvaluation.Score
+		for j := i + 1; j < len(g.Players); j++ {
+			winningHand, winningHandEvaluation := EvaluateTwoHands(g.Players[i].Hand, g.Players[j].Hand)
+			if winningHandEvaluation.Score > bestScore {
+				bestScore = winningHandEvaluation.Score
+				bestHandEvaluation = winningHandEvaluation
+				if reflect.DeepEqual(winningHand, g.Players[i].Hand) {
+					bestPlayerIndex = i
+				} else if reflect.DeepEqual(winningHand, g.Players[j].Hand) {
+					bestPlayerIndex = j
+				}
+			}
 		}
 	}
 
 	if bestPlayerIndex != -1 {
 		g.Players[bestPlayerIndex].Score += bestScore
-		fmt.Printf("Player %s wins the round and gets %d points\n", g.Players[bestPlayerIndex].Name, bestScore)
+		fmt.Printf("Player %s wins the round with a %v of %v and gets %d points\n", g.Players[bestPlayerIndex].Name, bestHandEvaluation.Rank, bestHandEvaluation.ScoreCards, bestScore)
 	}
+
 }

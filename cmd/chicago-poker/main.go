@@ -8,7 +8,8 @@ import (
 func main() {
 	p1 := player.NewPlayer("Anton")
 	p2 := player.NewPlayer("Nora")
-	gamet := game.NewGame([]*player.Player{p1, p2})
+	p3 := player.NewPlayer("Niklas")
+	gamet := game.NewGame([]*player.Player{p1, p2, p3})
 
 	gamet.StartGame()
 }
