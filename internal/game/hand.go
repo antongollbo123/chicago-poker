@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"reflect"
 	"sort"
 
@@ -85,7 +84,6 @@ func EvaluateHand(hand []cards.Card) HandEvaluation {
 			return HandEvaluation{Rank: Triple, Score: 3, ScoreCards: nOfAKindCards}
 		}
 		if twoPairCards, ok := getTwoPair(rankCounts); ok {
-			fmt.Println("In two pair cards")
 			return HandEvaluation{Rank: TwoPair, Score: 2, ScoreCards: twoPairCards}
 		}
 		if nOfAKindCards, ok := getNOfAKind(rankCounts, 2); ok {
@@ -176,8 +174,6 @@ func EvaluateTwoHands(hand1, hand2 []cards.Card) ([]cards.Card, HandEvaluation) 
 	hand1 = sortCards(hand1)
 	hand2 = sortCards(hand2)
 
-	sortedHand := sortCards(hand2)
-	fmt.Println(hand1, hand2, sortedHand)
 	for i := 0; i < len(hand1Eval.ScoreCards); i++ {
 		if hand1Eval.ScoreCards[i].Rank > hand2Eval.ScoreCards[i].Rank {
 			return hand1, hand1Eval
@@ -192,11 +188,9 @@ func EvaluateTwoHands(hand1, hand2 []cards.Card) ([]cards.Card, HandEvaluation) 
 			return hand2, hand2Eval
 		}
 	}
-	fmt.Println(hand1Eval.ScoreCards, hand2Eval.ScoreCards)
 	winningHand := compareSuit(hand1Eval.ScoreCards, hand2Eval.ScoreCards)
 
 	if reflect.DeepEqual(winningHand, hand1Eval.ScoreCards) {
-		fmt.Println(hand1Eval.ScoreCards, hand2Eval.ScoreCards)
 		return hand1, hand1Eval
 	} else if reflect.DeepEqual(winningHand, hand2Eval.ScoreCards) {
 		return hand2, hand2Eval
@@ -221,7 +215,6 @@ func sortSuit(cards_ []cards.Card) []cards.Card {
 }
 
 func compareSuit(hand1, hand2 []cards.Card) []cards.Card {
-	fmt.Println("Hand 1: ", hand1, "Hand 2: ", hand2)
 	for i := 0; i < len(hand1); i++ {
 		if cards.SuitValue(string(hand1[i].Suit)) > cards.SuitValue(string(hand2[i].Suit)) {
 			return hand1

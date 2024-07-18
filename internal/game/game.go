@@ -39,7 +39,6 @@ func NewGame(players []*player.Player) *Game {
 	deck := deck.NewDeck()
 	deck.Shuffle()
 	game.Deck = deck
-	game.Deal()
 	return &game
 }
 
@@ -67,9 +66,20 @@ func (g *Game) TossCards(playerIndex int, indicesToRemove []int) {
 	}
 }
 
-func (g *Game) StartGame() {
+func (g *Game) getHighScore() int {
+	highScore := 0
+	for _, player := range g.Players {
+		if player.Score > highScore {
+			highScore = player.Score
+		}
+	}
+	fmt.Println("high score is: ", highScore)
+	return highScore
+}
 
-	for {
+func (g *Game) StartGame() {
+	g.Deal()
+	for g.getHighScore() < 50 {
 		switch g.Stage {
 		case Poker:
 			g.PokerRound()
@@ -98,7 +108,9 @@ func (g *Game) PokerRound() {
 
 		fmt.Printf("Player %s has new hand: %v\n", player.Name, player.Hand)
 	}
-	g.EvaluateHands()
+	bestPlayerIndex, bestHandEvaluation := g.EvaluateHands()
+
+	fmt.Printf("Player %s wins the round with a %v of %v and gets %d points\n", g.Players[bestPlayerIndex].Name, bestHandEvaluation.Rank, bestHandEvaluation.ScoreCards, bestHandEvaluation.Score)
 
 	g.Round++
 
@@ -111,43 +123,97 @@ func (g *Game) PokerRound() {
 func (g *Game) TrickRound() {
 	fmt.Println("TRICK ROUND!")
 	scanner := bufio.NewScanner(os.Stdin)
+	// Make copies of hands
+	bestPlayerIndex, bestHandEvaluation := g.EvaluateHands()
 
-	var handCopies []cards.Card
+	leadIndex := 0
+	for trick := 0; trick < 5; trick++ {
+		var leadCard cards.Card
+		playedCards := make([]cards.Card, len(g.Players))
+		indicesToRemove := make([][]int, len(g.Players))
 
-	var playedCard cards.Card
+		fmt.Printf("Starting trick %d\n", trick+1)
+		for i := 0; i < len(g.Players); i++ {
+			currentIndex := (leadIndex + i) % len(g.Players)
+			player := g.Players[currentIndex]
 
-	for _, player := range g.Players {
-		handCopies = append(handCopies, player.Hand...)
+			fmt.Printf("Player %s, your hand is: %v\n", player.Name, player.Hand)
+			fmt.Printf("Enter the index of the card you want to play: ")
+			scanner.Scan()
+			input := scanner.Text()
+			indexToPlay := ParseInput(input)
 
-	}
-	for i, player := range g.Players {
-		fmt.Printf("Player %s, your hand is: %v\n", player.Name, player.Hand)
-		fmt.Printf("Enter the index of the card you want to play: ")
-		scanner.Scan()
-		input := scanner.Text()
-		// TODO: Create copies of players hands ?
-		//trickHand := g.Players[i].Hand
-		indexToPlay := ParseInput(input)
-		fmt.Println(playedCard == (cards.Card{}))
-		if indexToPlay[0] < len(g.Players[i].Hand) && i == 0 {
-			playedCard := g.Players[i].Hand[indexToPlay[0]]
-			g.TossCards(i, indexToPlay)
-			fmt.Println(playedCard, g.Players[i].Hand)
-		} else {
-
-			lastSuit := playedCard.Suit
-			condition := func(c cards.Card) bool {
-				return c.Suit == lastSuit
+			if len(indexToPlay) != 1 || indexToPlay[0] < 0 || indexToPlay[0] >= len(player.Hand) {
+				fmt.Println("Invalid card index. Try again.")
+				i-- // Ask the same player to play again
+				continue
 			}
 
-			filteredCards := filterCards(g.Players[i].Hand, condition)
-			fmt.Println(filteredCards)
+			playedCard := player.Hand[indexToPlay[0]]
 
+			if i == 0 {
+				leadCard = playedCard
+			} else {
+				if playedCard.Suit != leadCard.Suit && hasSuit(player.Hand, leadCard.Suit) {
+					fmt.Println("You must follow the suit. Try again.")
+					i-- // Ask the same player to play again
+					continue
+				}
+			}
+
+			playedCards[currentIndex] = playedCard
+			indicesToRemove[currentIndex] = []int{indexToPlay[0]}
+			fmt.Printf("Player %s played %v\n", player.Name, playedCard)
 		}
+
+		winnerIndex := findWinner(playedCards, leadIndex)
+		fmt.Printf("Player %s wins the trick with %v\n", g.Players[winnerIndex].Name, playedCards[winnerIndex])
+
+		// Remove played cards from players' hands using TossCards
+		for i := range indicesToRemove {
+			if len(indicesToRemove[i]) > 0 {
+				g.TossCards(i, indicesToRemove[i])
+			}
+		}
+
+		leadIndex = winnerIndex
 	}
+	// Award points to the player who wins the last trick
+	g.Players[leadIndex].Score += TrickWin
+	g.Round++
+	fmt.Printf("Player %s wins the trick round and gets %d points\n", g.Players[leadIndex].Name, TrickWin)
+	g.Stage = Poker
+	g.Deal()
+	fmt.Printf("Player %s wins the final poker round with a %v of %v and gets %d points\n", g.Players[bestPlayerIndex].Name, bestHandEvaluation.Rank, bestHandEvaluation.ScoreCards, bestHandEvaluation.Score)
 }
 
-func (g *Game) EvaluateHands() {
+// Check if a player has a card of a given suit
+func hasSuit(hand []cards.Card, suit cards.Suit) bool {
+	for _, card := range hand {
+		if card.Suit == suit {
+			return true
+		}
+	}
+	return false
+}
+
+// Find the winner of the current trick
+func findWinner(playedCards []cards.Card, leadIndex int) int {
+	leadSuit := playedCards[leadIndex].Suit
+	highestCard := playedCards[leadIndex]
+	highestIndex := leadIndex
+
+	for i, card := range playedCards {
+		if card.Suit == leadSuit && card.Rank > highestCard.Rank {
+			highestCard = card
+			highestIndex = i
+		}
+	}
+
+	return highestIndex
+}
+
+func (g *Game) EvaluateHands() (int, HandEvaluation) {
 	bestScore := -1
 	bestPlayerIndex := -1
 	var bestHandEvaluation HandEvaluation
@@ -168,7 +234,7 @@ func (g *Game) EvaluateHands() {
 
 	if bestPlayerIndex != -1 {
 		g.Players[bestPlayerIndex].Score += bestScore
-		fmt.Printf("Player %s wins the round with a %v of %v and gets %d points\n", g.Players[bestPlayerIndex].Name, bestHandEvaluation.Rank, bestHandEvaluation.ScoreCards, bestScore)
+		return bestPlayerIndex, bestHandEvaluation
 	}
-
+	return 0, HandEvaluation{}
 }
