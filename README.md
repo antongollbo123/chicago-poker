@@ -13,7 +13,8 @@ A command line chicago poker game!
 1. Starting a server, a client being able to join, a client being able to send a message containing name of player, a new player is created using the sent message of the client
 
 2. Add playerConnections map to Game struct, keeping all players individual connections inside the game struct.
-Something like this should happen when a game is started: 
+Something like this should happen when a game is started:
+``` 
             func NewGame(players []*player.Player) *Game {
                 game := Game{}
                 game.Round = 0
@@ -26,7 +27,15 @@ Something like this should happen when a game is started:
                 game.Deck = deck
                 return &game
             }
-3. Add broadcastMessage method to Game, enabling broadcasting of game state to several clients, something like this:
+``` 
+4. Add addPlayerConnection method to Game:
+``` 
+   func (g *Game) AddPlayerConnection(playerName string, conn net.Conn) {
+    g.playerConnections[playerName] = conn
+}
+``` 
+6. Add broadcastMessage method to Game, enabling broadcasting of game state to several clients, something like this:
+``` 
                 func (g *Game) BroadcastMessage(message string) {
             for _, conn := range g.playerConnections {
                 if conn != nil {
@@ -34,5 +43,5 @@ Something like this should happen when a game is started:
                 }
             }
         }
-
+``` 
 
