@@ -3,118 +3,128 @@ package game
 import (
 	"bufio"
 	"fmt"
+	"io"
+	"log"
 	"net"
-	"os"
-	"strings"
 )
 
-func StartServer() {
-	ln, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		fmt.Println("Error starting server:", err)
-		return
+type client struct {
+	name  string
+	conn  net.Conn
+	in    chan []byte
+	out   chan []byte
+	token chan struct{}
+}
+type chat struct {
+	clients      map[*client]bool
+	messageQueue chan []byte
+	exitQueue    chan *client
+}
+
+func NewChat() *chat {
+	return &chat{
+		clients:      make(map[*client]bool),
+		messageQueue: make(chan []byte),
+		exitQueue:    make(chan *client),
 	}
-	defer ln.Close()
+}
 
-	fmt.Println("Server started on port 8080...")
+func (c *chat) Start() {
+	c.buildServer()
+}
 
+func (c *chat) buildServer() {
+	server, err := net.Listen("tcp", ":8081")
+
+	if err != nil {
+		log.Fatalf("could not start chat: %v", err)
+	}
+	go c.serve()
 	for {
-		conn, err := ln.Accept()
+		conn, err := server.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection:", err)
+			log.Fatalf("connection err: %v", err)
 			continue
 		}
-
-		go handleConnection(conn)
+		go c.handleConnection(conn)
 	}
 }
 
-func StartClient() {
-	conn, err := net.Dial("tcp", "localhost:8080")
-	if err != nil {
-		fmt.Println("Error connecting to server:", err)
-		return
-	}
-	defer conn.Close()
+func (c *chat) exitGuide(client *client) {
+	delete(c.clients, client)
+	close(client.in)
+	close(client.out)
 
-	initializeClient(conn)
-	startChat(conn)
+	c.messageQueue <- []byte(fmt.Sprintf("%s left the chat\n", client.name))
+	defer client.conn.Close()
 }
 
-func initializeClient(conn net.Conn) {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Print("Enter your application name: ")
-	name, _ := reader.ReadString('\n')
-	name = strings.TrimSpace(name)
-
-	_, err := conn.Write([]byte("NAME:" + name + "\n"))
-	if err != nil {
-		fmt.Println("Error sending name:", err)
-		return
-	}
-
-	fmt.Println("Name sent:", name)
-}
-
-func startChat(conn net.Conn) {
-	reader := bufio.NewReader(os.Stdin)
-	serverReader := bufio.NewReader(conn)
-
-	go func() {
-		for {
-			msg, err := serverReader.ReadString('\n')
-			if err != nil {
-				fmt.Println("Error reading from server:", err)
-				return
-			}
-			fmt.Print("Server: " + msg)
-		}
-	}()
-
+func (c *chat) serve() {
+	fmt.Println("Server is running on port: 8081")
 	for {
-		fmt.Print("You: ")
-		userInput, _ := reader.ReadString('\n')
-		userInput = strings.TrimSpace(userInput)
-
-		if strings.ToLower(userInput) == "exit" {
-			fmt.Println("Exiting chat...")
-			return
-		}
-
-		_, err := conn.Write([]byte("MESSAGE:" + userInput + "\n"))
-		if err != nil {
-			fmt.Println("Error sending message:", err)
-			return
+		select {
+		case msg := <-c.messageQueue:
+			for client := range c.clients {
+				client.out <- msg
+			}
+		case client := <-c.exitQueue:
+			go c.exitGuide(client)
 		}
 	}
-
 }
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
+func (c *chat) handleConnection(conn net.Conn) {
+	in, out := make(chan []byte), make(chan []byte)
+	client := newClient(conn, in, out)
+	c.clients[client] = true
+	client.start()
+	go c.bookRoom(client)
+	<-client.token
+	c.exitQueue <- client
+}
 
-	reader := bufio.NewReader(conn)
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Error reading from connection: ", err)
-			return
-		}
-		message = strings.TrimSpace(message)
+func newClient(conn net.Conn, in chan []byte, out chan []byte) *client {
+	return &client{in: in, out: out, conn: conn}
+}
 
-		if strings.HasPrefix(message, "NAME:") {
-			name := strings.TrimPrefix(message, "NAME:")
-			fmt.Println(name, " has joined the game!")
-		} else if strings.HasPrefix(message, "MESSAGE:") {
-			msg := strings.TrimPrefix(message, "MESSAGE:")
-			fmt.Println("Received message:", msg)
-			// Send a response back to the client
-			_, err := conn.Write([]byte("ACK: " + msg + " received\n"))
-			if err != nil {
-				fmt.Println("Error sending acknowledgment:", err)
-				return
-			}
-		}
+func (c *chat) bookRoom(client *client) {
+	for msg := range client.in {
+		c.messageQueue <- []byte(fmt.Sprintf("%s says: %s\n", client.name, string(msg)))
 	}
+}
+
+func (cl *client) start() {
+	cl.setUpUsername()
+	go cl.receiveMessages()
+	go cl.sendMessages()
+}
+
+func (cl *client) receiveMessages() {
+	scanner := bufio.NewScanner(cl.conn)
+	for scanner.Scan() {
+		if scanner.Err() != nil {
+			log.Fatalf("receive message error: %v: ", scanner.Err())
+			break
+		}
+		cl.in <- scanner.Bytes()
+	}
+	cl.token <- struct{}{}
+}
+
+func (cl *client) sendMessages() {
+	for msg := range cl.out {
+		cl.conn.Write(msg)
+	}
+}
+
+func (cl *client) setUpUsername() {
+	io.WriteString(cl.conn, "Enter your username: ")
+	scann := bufio.NewScanner(cl.conn)
+	scann.Scan()
+	cl.name = scann.Text()
+	io.WriteString(cl.conn, fmt.Sprintf("welcome %s\n", cl.name))
+}
+
+func network2() {
+
 }

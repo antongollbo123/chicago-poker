@@ -1,25 +1,10 @@
 package main
 
-import (
-	"flag"
-	"fmt"
-	"os"
-
-	"github.com/antongollbo123/chicago-poker/internal/game"
-)
+import "github.com/antongollbo123/chicago-poker/internal/game"
 
 func main() {
-	mode := flag.String("mode", "", "start as 'server' or 'client'")
-	flag.Parse()
-
-	if *mode == "server" {
-		game.StartServer()
-	} else if *mode == "client" {
-		game.StartClient()
-	} else {
-		fmt.Println("Please specify a mode: -mode=server or -mode=client")
-		os.Exit(1)
-	}
+	chat := game.NewChat()
+	chat.Start()
 }
 
 /*p1 := player.NewPlayer("Anton")
