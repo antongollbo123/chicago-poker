@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 )
 
 type client struct {
@@ -21,6 +22,8 @@ type chat struct {
 	exitQueue    chan *client
 }
 
+var port string = ":8082"
+
 func NewChat() *chat {
 	return &chat{
 		clients:      make(map[*client]bool),
@@ -34,7 +37,7 @@ func (c *chat) Start() {
 }
 
 func (c *chat) buildServer() {
-	server, err := net.Listen("tcp", ":8081")
+	server, err := net.Listen("tcp", port)
 
 	if err != nil {
 		log.Fatalf("could not start chat: %v", err)
@@ -51,24 +54,39 @@ func (c *chat) buildServer() {
 }
 
 func (c *chat) exitGuide(client *client) {
+	// Send a message to all other clients notifying them the client has left
+	leaveMessage := fmt.Sprintf("%s has left the chat.\n", client.name)
+	log.Printf("Sending exit message: %s", leaveMessage) // Log exit message
+	c.broadcastMessage([]byte(leaveMessage))             // This should trigger a broadcast
+
 	delete(c.clients, client)
 	close(client.in)
 	close(client.out)
-
-	c.messageQueue <- []byte(fmt.Sprintf("%s left the chat\n", client.name))
 	defer client.conn.Close()
+	log.Printf("Client %s has disconnected.", client.name)
 }
 
 func (c *chat) serve() {
-	fmt.Println("Server is running on port: 8081")
+	fmt.Println("Server is running on port ", port)
 	for {
 		select {
 		case msg := <-c.messageQueue:
-			for client := range c.clients {
-				client.out <- msg
-			}
+			log.Printf("Broadcasting message: %s", msg)
+			c.broadcastMessage(msg)
 		case client := <-c.exitQueue:
+			log.Printf("Processing exit for client: %s", client.name)
 			go c.exitGuide(client)
+		}
+	}
+}
+
+func (c *chat) broadcastMessage(msg []byte) {
+	for client := range c.clients {
+		select {
+		case client.out <- msg:
+			log.Printf("Sent message to client: %s", client.name)
+		default:
+			log.Printf("Failed to send message to client %s: channel full or closed", client.name)
 		}
 	}
 }
@@ -77,43 +95,45 @@ func (c *chat) handleConnection(conn net.Conn) {
 	in, out := make(chan []byte), make(chan []byte)
 	client := newClient(conn, in, out)
 	c.clients[client] = true
-	client.start()
-	go c.bookRoom(client)
-	<-client.token
-	c.exitQueue <- client
+	client.start(c)
 }
 
 func newClient(conn net.Conn, in chan []byte, out chan []byte) *client {
+	conn.(*net.TCPConn).SetKeepAlive(true)
+	conn.(*net.TCPConn).SetKeepAlivePeriod(15 * time.Second)
 	return &client{in: in, out: out, conn: conn}
 }
 
-func (c *chat) bookRoom(client *client) {
-	for msg := range client.in {
-		c.messageQueue <- []byte(fmt.Sprintf("%s says: %s\n", client.name, string(msg)))
-	}
-}
-
-func (cl *client) start() {
+func (cl *client) start(c *chat) {
 	cl.setUpUsername()
-	go cl.receiveMessages()
+	go cl.receiveMessages(c)
 	go cl.sendMessages()
 }
 
-func (cl *client) receiveMessages() {
+func (cl *client) receiveMessages(c *chat) {
+	defer func() {
+		c.exitQueue <- cl
+	}()
+
 	scanner := bufio.NewScanner(cl.conn)
 	for scanner.Scan() {
 		if scanner.Err() != nil {
-			log.Fatalf("receive message error: %v: ", scanner.Err())
+			log.Printf("Error reading from client %s: %v", cl.name, scanner.Err())
 			break
 		}
-		cl.in <- scanner.Bytes()
+		msg := fmt.Sprintf("%s: %s\n", cl.name, scanner.Text())
+		c.messageQueue <- []byte(msg)
 	}
-	cl.token <- struct{}{}
+	log.Printf("Client %s has disconnected.", cl.name)
 }
 
 func (cl *client) sendMessages() {
 	for msg := range cl.out {
-		cl.conn.Write(msg)
+		_, err := cl.conn.Write(msg)
+		if err != nil {
+			log.Printf("Failed to send message to client %s: %v", cl.name, err)
+			return
+		}
 	}
 }
 
@@ -123,8 +143,4 @@ func (cl *client) setUpUsername() {
 	scann.Scan()
 	cl.name = scann.Text()
 	io.WriteString(cl.conn, fmt.Sprintf("welcome %s\n", cl.name))
-}
-
-func network2() {
-
 }
