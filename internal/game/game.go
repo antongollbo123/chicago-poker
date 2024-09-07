@@ -34,7 +34,7 @@ type Game struct {
 func NewGame(players []*player.Player) *Game {
 	game := Game{}
 	game.Round = 0
-	game.Stage = Trick // Change back to poker
+	game.Stage = Poker // Change back to poker
 	game.Players = players
 	deck := deck.NewDeck()
 	deck.Shuffle()
