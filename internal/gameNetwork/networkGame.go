@@ -2,7 +2,6 @@ package gameNetwork
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -32,13 +31,11 @@ type Game struct {
 	Round     int
 	Stage     Stage
 	leadIndex int
-	server    *GameServer // Add reference to GameServer
 }
 
-func NewGame(players []*player.Player, server *GameServer) *Game {
+func NewGame(players []*player.Player) *Game {
 	game := Game{
 		Players: players,
-		server:  server,
 		Round:   0,
 		Stage:   Poker,
 	}
@@ -84,12 +81,12 @@ func (g *Game) getHighScore() int {
 	return highScore
 }
 
-func (g *Game) StartGame() {
+func (g *Game) StartGame(server *GameServer) {
 	g.Deal()
 	for g.getHighScore() < 50 {
 		switch g.Stage {
 		case Poker:
-			g.PokerRound()
+			g.PokerRound(server)
 		case Trick:
 			g.TrickRound()
 		}
@@ -98,7 +95,25 @@ func (g *Game) StartGame() {
 
 }
 
-func (g *Game) PokerRound() {
+func (g *Game) AddPlayer(player *player.Player, server *GameServer) {
+	if g == nil {
+		fmt.Println("Error: Game instance is nil.")
+		return
+	}
+	print("PLAYER NAME INSIDE: ", player.Name)
+	g.Players = append(g.Players, player)
+	fmt.Printf("Player %s has been added to the game.\n", player.Name)
+
+	// Optionally notify the server or other players about the new player
+	msg := Message{
+		PlayerName: player.Name,
+		MoveType:   PlayerJoined,
+		Data:       fmt.Sprintf("%s has joined the game!", player.Name),
+	}
+	g.notifyServer(server, msg)
+}
+
+func (g *Game) PokerRound(server *GameServer) {
 	fmt.Println("Starting Poker Round: ", g.Round+1)
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -109,7 +124,7 @@ func (g *Game) PokerRound() {
 			MoveType:   GameUpdate,
 			Data:       player.Hand,
 		}
-		g.notifyServer(g.server, msg) // Notify server to send to player
+		g.notifyServer(server, msg) // Notify server to send to player
 
 		// Prompt for cards to toss
 		msg = Message{
@@ -117,12 +132,14 @@ func (g *Game) PokerRound() {
 			MoveType:   NextTurn,
 			Data:       "Enter the indices of the cards you want to toss, separated by spaces: ",
 		}
-		g.notifyServer(g.server, msg)
+		g.notifyServer(server, msg)
 
 		// Handle input
 		scanner.Scan()
 		input := scanner.Text()
+		print("INPUT THAT WAS GIVEN FROM PLAYER NO: ", i, " :::: ", input)
 		indicesToRemove := game.ParseInput(input)
+		g.TossCards(i, indicesToRemove)
 
 		// Sending the toss cards message
 		msg = Message{
@@ -130,19 +147,20 @@ func (g *Game) PokerRound() {
 			MoveType:   PokerToss,
 			Data:       indicesToRemove,
 		}
-		g.notifyServer(g.server, msg)
+		g.notifyServer(server, msg)
 
 		// Tossing cards and dealing new ones
 		g.TossCards(i, indicesToRemove)
 		newCards := g.Deck.DrawMultiple(len(indicesToRemove))
 		g.Players[i].Hand = append(g.Players[i].Hand, newCards...)
+		fmt.Printf("Player %s has new hand: %v\n", g.Players[i].Name, g.Players[i].Hand)
 
 		msg = Message{
 			PlayerName: player.Name,
 			MoveType:   GameUpdate,
 			Data:       g.Players[i].Hand,
 		}
-		g.notifyServer(g.server, msg)
+		g.notifyServer(server, msg)
 	}
 
 	// Rest of the method remains unchanged...
@@ -335,21 +353,10 @@ func isValidTrickMove(player *player.Player, playedCard cards.Card, leadCard car
 
 func (g *Game) notifyServer(server *GameServer, msg Message) {
 	// Notify server to send message to the specific player
+	fmt.Print("Inside notify")
+
 	if err := server.sendMessageToPlayer(msg.PlayerName, msg); err != nil {
 		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
 	}
-}
 
-func (s *GameServer) sendMessageToPlayer(playerName string, msg Message) error {
-	for client := range s.Clients { // Iterate over all connected clients
-		if client.player.Name == playerName { // Match by player name
-			jsonMsg, err := json.Marshal(msg)
-			if err != nil {
-				return err
-			}
-			_, err = client.conn.Write(jsonMsg) // Send the message
-			return err
-		}
-	}
-	return fmt.Errorf("Client for player %s not found", playerName)
 }

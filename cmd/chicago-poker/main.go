@@ -8,10 +8,7 @@ import (
 func main() {
 	// Initialize the GameServer
 	gameServer := &gameNetwork.GameServer{
-		Clients:      make(map[*gameNetwork.Client]bool),
-		MessageQueue: make(chan []byte),
-		MoveQueue:    make(chan []byte),
-		ExitQueue:    make(chan *gameNetwork.Client),
+		Clients: make(map[*gameNetwork.Client]bool),
 	}
 
 	// Start the GameServer
@@ -30,9 +27,7 @@ func main() {
 			// In a real application, you would handle this in the handleConnection method
 		}
 
-		// Create a new game with the connected players
-		newGame := gameNetwork.NewGame(players, gameServer)
-		newGame.StartGame() // Start the game
+		gameServer.Game.StartGame(gameServer) // Start the game
 	}()
 
 	// Blocking main goroutine
