@@ -133,3 +133,5 @@ func (s *GameServer) sendMessageToPlayer(playerName string, msg Message) error {
 	}
 	return fmt.Errorf("Client for player %s not found", playerName)
 }
+
+// TODO: Add format message function
