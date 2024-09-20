@@ -2,6 +2,7 @@ package gameNetwork
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -91,19 +92,29 @@ func (s *GameServer) handleConnection(c *Client) {
 			break
 		}
 
-		var msg Message
-		print("HERE IS THE ATTEMPTED MESSAGE:")
-		if err := json.Unmarshal(buffer[:n], &msg); err != nil {
-			fmt.Println("Error parsing message:", err)
-			continue
+		// Split by newline to handle multiple messages
+		parts := bytes.Split(buffer[:n], []byte("\n"))
+		for _, part := range parts {
+			if len(part) == 0 {
+				continue // Skip empty parts
+			}
+
+			// Debugging: log the raw part received
+			fmt.Printf("Raw received part: %s\n", parts)
+
+			var msg Message
+			if err := json.Unmarshal(part, &msg); err != nil {
+				fmt.Println("Error parsing message:", err)
+				continue
+			}
+
+			// Process the message based on its MoveType
+			err = s.Game.processMove(msg.PlayerName, msg.MoveType, msg.Data)
+			if err != nil {
+				fmt.Printf("Error processing move from player %s: %v\n", msg.PlayerName, err)
+			}
 		}
 
-		// Instead of broadcasting all messages, process moves from the player
-		err = s.Game.processMove(msg.PlayerName, msg.MoveType, msg.Data)
-		if err != nil {
-			fmt.Printf("Error processing move from player %s: %v\n", msg.PlayerName, err)
-			continue
-		}
 	}
 	delete(s.Clients, c)
 }
@@ -143,6 +154,15 @@ func (s *GameServer) sendMessageToPlayer(playerName string, msg Message) error {
 		}
 	}
 	return fmt.Errorf("Client for player %s not found", playerName)
+}
+
+func (s *GameServer) getPlayerConnection(playerName string) net.Conn {
+	for client := range s.Clients {
+		if client.name == playerName {
+			return client.conn
+		}
+	}
+	return nil
 }
 
 // TODO: Add format message function

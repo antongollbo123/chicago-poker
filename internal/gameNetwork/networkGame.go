@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"reflect"
 	"sort"
@@ -137,32 +138,37 @@ func (g *Game) PokerRound(server *GameServer) {
 
 		input := waitForInput(player.Name)
 
-		jsonData, err := json.Marshal(input)
-		if err != nil {
-			fmt.Printf("Error marshalling data: %v\n", err)
-			continue
-		}
-		server.broadcastMessage(jsonData)
-		msg = Message{
-			PlayerName: player.Name,
-			MoveType:   PokerToss,
-			Data:       string(jsonData),
-		}
-		g.notifyServer(server, msg)
+		log.Printf("Input inside pokerRound before sending: %v\n", input)
+
+		g.notifyServer(server, input)
 	}
 
 	// Rest of the method remains unchanged...
 }
 
-func waitForInput(playerName string) string {
+func waitForInput(playerName string) Message {
 	fmt.Printf("%s, please enter your move: ", playerName)
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Printf("Error reading input: %v\n", err)
-		return ""
+
+	var input string = "0 1 2" // Hardcoded for testing
+	/*
+		if err != nil {
+			log.Printf("Error reading input: %v\n", err)
+			return Message{}
+		}
+	*/
+	// Split input into a slice of indices (assuming space-separated)
+	indices := strings.Fields(input)
+
+	// Create the message struct
+	msg := Message{
+		PlayerName: playerName,
+		MoveType:   PokerToss, // Set the correct move type
+		Data:       indices,   // Indices should be sent as a slice of strings
 	}
-	return strings.TrimSpace(input) // Remove newline characters
+
+	fmt.Printf("%s, your move ", indices)
+
+	return msg
 }
 
 func (g *Game) TrickRound() {
@@ -354,8 +360,23 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 	// Notify server to send message to the specific player
 	fmt.Print("Inside notify")
 
-	if err := server.sendMessageToPlayer(msg.PlayerName, msg); err != nil {
-		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
+	// Assuming server has a method to get the connection of a player
+	playerConn := server.getPlayerConnection(msg.PlayerName)
+	if playerConn == nil {
+		fmt.Printf("No connection found for player %s\n", msg.PlayerName)
+		return
 	}
 
+	// Marshal the message to JSON
+	jsonData, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Printf("Error marshaling message for player %s: %v\n", msg.PlayerName, err)
+		return
+	}
+	print(jsonData)
+	// Send the message over the player's connection
+	_, err = playerConn.Write(jsonData)
+	if err != nil {
+		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
+	}
 }
