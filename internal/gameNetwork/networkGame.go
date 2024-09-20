@@ -2,10 +2,12 @@ package gameNetwork
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/antongollbo123/chicago-poker/internal/deck"
 	"github.com/antongollbo123/chicago-poker/internal/game"
@@ -115,9 +117,8 @@ func (g *Game) AddPlayer(player *player.Player, server *GameServer) {
 
 func (g *Game) PokerRound(server *GameServer) {
 	fmt.Println("Starting Poker Round: ", g.Round+1)
-	scanner := bufio.NewScanner(os.Stdin)
 
-	for i, player := range g.Players {
+	for _, player := range g.Players {
 		// Show player's hand
 		msg := Message{
 			PlayerName: player.Name,
@@ -134,36 +135,34 @@ func (g *Game) PokerRound(server *GameServer) {
 		}
 		g.notifyServer(server, msg)
 
-		// Handle input
-		scanner.Scan()
-		input := scanner.Text()
-		print("INPUT THAT WAS GIVEN FROM PLAYER NO: ", i, " :::: ", input)
-		indicesToRemove := game.ParseInput(input)
-		g.TossCards(i, indicesToRemove)
+		input := waitForInput(player.Name)
 
-		// Sending the toss cards message
+		jsonData, err := json.Marshal(input)
+		if err != nil {
+			fmt.Printf("Error marshalling data: %v\n", err)
+			continue
+		}
+		server.broadcastMessage(jsonData)
 		msg = Message{
 			PlayerName: player.Name,
 			MoveType:   PokerToss,
-			Data:       indicesToRemove,
-		}
-		g.notifyServer(server, msg)
-
-		// Tossing cards and dealing new ones
-		g.TossCards(i, indicesToRemove)
-		newCards := g.Deck.DrawMultiple(len(indicesToRemove))
-		g.Players[i].Hand = append(g.Players[i].Hand, newCards...)
-		fmt.Printf("Player %s has new hand: %v\n", g.Players[i].Name, g.Players[i].Hand)
-
-		msg = Message{
-			PlayerName: player.Name,
-			MoveType:   GameUpdate,
-			Data:       g.Players[i].Hand,
+			Data:       string(jsonData),
 		}
 		g.notifyServer(server, msg)
 	}
 
 	// Rest of the method remains unchanged...
+}
+
+func waitForInput(playerName string) string {
+	fmt.Printf("%s, please enter your move: ", playerName)
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return ""
+	}
+	return strings.TrimSpace(input) // Remove newline characters
 }
 
 func (g *Game) TrickRound() {

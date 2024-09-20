@@ -80,20 +80,31 @@ func (s *GameServer) handleConnection(c *Client) {
 
 	// Check if the game can be started
 	if len(s.Game.Players) >= 2 {
-		s.broadcastMessage([]byte("Starting the game with 4 players!"))
+		s.broadcastMessage([]byte("Starting the game with 2 players!"))
 		s.Game.StartGame(s)
 	}
 
 	for {
 		buffer := make([]byte, 1024)
-		_, err := c.conn.Read(buffer)
+		n, err := c.conn.Read(buffer)
 		if err != nil {
 			break
 		}
-		message := string(buffer)
-		s.broadcastMessage([]byte(fmt.Sprintf("%s: %s", playerName, message)))
-	}
 
+		var msg Message
+		print("HERE IS THE ATTEMPTED MESSAGE:")
+		if err := json.Unmarshal(buffer[:n], &msg); err != nil {
+			fmt.Println("Error parsing message:", err)
+			continue
+		}
+
+		// Instead of broadcasting all messages, process moves from the player
+		err = s.Game.processMove(msg.PlayerName, msg.MoveType, msg.Data)
+		if err != nil {
+			fmt.Printf("Error processing move from player %s: %v\n", msg.PlayerName, err)
+			continue
+		}
+	}
 	delete(s.Clients, c)
 }
 
