@@ -2,7 +2,6 @@ package gameNetwork
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -72,49 +71,30 @@ func (s *GameServer) handleConnection(c *Client) {
 		return
 	}
 	c.player = &player.Player{Name: playerName}
-	print("HERE IS THE NAME:", c.player.Name)
-	// Notify the game to add the player
 	s.Game.AddPlayer(c.player, s)
-
-	// Notify other players of the new player
 	s.broadcastMessage([]byte(fmt.Sprintf("%s has joined the game.", playerName)))
 
-	// Check if the game can be started
-	if len(s.Game.Players) >= 2 {
-		s.broadcastMessage([]byte("Starting the game with 2 players!"))
-		s.Game.StartGame(s)
+	if len(s.Game.Players) >= 1 {
+		s.broadcastMessage([]byte("Starting the game with 1 players!"))
+		go s.Game.StartGame(s)
 	}
 
+	decoder := json.NewDecoder(c.conn)
 	for {
-		buffer := make([]byte, 1024)
-		n, err := c.conn.Read(buffer)
+		var msg Message
+		err := decoder.Decode(&msg)
 		if err != nil {
-			break
+			if err == io.EOF {
+				break
+			}
+			log.Printf("Error decoding message: %v\n", err)
+			continue
 		}
-
-		// Split by newline to handle multiple messages
-		parts := bytes.Split(buffer[:n], []byte("\n"))
-		for _, part := range parts {
-			if len(part) == 0 {
-				continue // Skip empty parts
-			}
-
-			// Debugging: log the raw part received
-			fmt.Printf("Raw received part: %s\n", parts)
-
-			var msg Message
-			if err := json.Unmarshal(part, &msg); err != nil {
-				fmt.Println("Error parsing message:", err)
-				continue
-			}
-
-			// Process the message based on its MoveType
-			err = s.Game.processMove(msg.PlayerName, msg.MoveType, msg.Data)
-			if err != nil {
-				fmt.Printf("Error processing move from player %s: %v\n", msg.PlayerName, err)
-			}
+		fmt.Println("Attempting to process move: ", msg.Data)
+		err = s.Game.processMove(msg.PlayerName, msg.MoveType, msg.Data)
+		if err != nil {
+			log.Printf("Error processing move: %v\n", err)
 		}
-
 	}
 	delete(s.Clients, c)
 }

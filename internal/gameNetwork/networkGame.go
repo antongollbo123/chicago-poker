@@ -8,7 +8,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
-	"strings"
+	"time"
 
 	"github.com/antongollbo123/chicago-poker/internal/deck"
 	"github.com/antongollbo123/chicago-poker/internal/game"
@@ -120,55 +120,27 @@ func (g *Game) PokerRound(server *GameServer) {
 	fmt.Println("Starting Poker Round: ", g.Round+1)
 
 	for _, player := range g.Players {
-		// Show player's hand
-		msg := Message{
+		// Send the player's hand
+		handMsg := Message{
 			PlayerName: player.Name,
 			MoveType:   GameUpdate,
 			Data:       player.Hand,
 		}
-		g.notifyServer(server, msg) // Notify server to send to player
+		g.notifyServer(server, handMsg)
 
-		// Prompt for cards to toss
-		msg = Message{
+		// Ask for the player's move
+		promptMsg := Message{
 			PlayerName: player.Name,
 			MoveType:   NextTurn,
 			Data:       "Enter the indices of the cards you want to toss, separated by spaces: ",
 		}
-		g.notifyServer(server, msg)
+		g.notifyServer(server, promptMsg)
 
-		input := waitForInput(player.Name)
-
-		log.Printf("Input inside pokerRound before sending: %v\n", input)
-
-		g.notifyServer(server, input)
+		// The actual processing of the move will happen in handleConnection
+		// We're just waiting here to ensure the round progresses properly
+		time.Sleep(time.Second * 5) // Adjust this timing as needed
 	}
-
-	// Rest of the method remains unchanged...
-}
-
-func waitForInput(playerName string) Message {
-	fmt.Printf("%s, please enter your move: ", playerName)
-
-	var input string = "0 1 2" // Hardcoded for testing
-	/*
-		if err != nil {
-			log.Printf("Error reading input: %v\n", err)
-			return Message{}
-		}
-	*/
-	// Split input into a slice of indices (assuming space-separated)
-	indices := strings.Fields(input)
-
-	// Create the message struct
-	msg := Message{
-		PlayerName: playerName,
-		MoveType:   PokerToss, // Set the correct move type
-		Data:       indices,   // Indices should be sent as a slice of strings
-	}
-
-	fmt.Printf("%s, your move ", indices)
-
-	return msg
+	g.Round++
 }
 
 func (g *Game) TrickRound() {
@@ -291,57 +263,36 @@ func (g *Game) EvaluateHands() (int, game.HandEvaluation) {
 }
 
 func (g *Game) processMove(playerName string, moveType MessageType, data interface{}) error {
-	var playerIndex int = -1
-
-	// Find the player making the move
-	for i, p := range g.Players {
-		if p.Name == playerName {
-			playerIndex = i
-			break
-		}
-	}
-
-	if playerIndex == -1 {
-		return fmt.Errorf("Player not found")
-	}
+	log.Printf("Processing move: Player: %s, Type: %s, Data: %v\n", playerName, moveType, data)
 
 	switch moveType {
 	case PokerToss:
-		indicesToRemove, ok := data.([]int)
+		indices, ok := data.([]interface{})
 		if !ok {
-			return fmt.Errorf("Invalid data format for poker_toss")
+			return fmt.Errorf("invalid data format for poker_toss")
 		}
 
-		g.TossCards(playerIndex, indicesToRemove)
-		newCards := g.Deck.DrawMultiple(len(indicesToRemove))
-		g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
-		fmt.Printf("Player %s has new hand: %v\n", g.Players[playerIndex].Name, g.Players[playerIndex].Hand)
-
-	case TrickPlay:
-		indexToPlay, ok := data.(int)
-		if !ok {
-			return fmt.Errorf("Invalid data format for trick_play")
-		}
-
-		player := g.Players[playerIndex]
-		if indexToPlay < 0 || indexToPlay >= len(player.Hand) {
-			return fmt.Errorf("Invalid card index")
-		}
-
-		playedCard := player.Hand[indexToPlay]
-
-		if g.Stage == Trick {
-			leadCard := g.Players[g.leadIndex].Hand[0] // Lead card of the round
-			if !isValidTrickMove(player, playedCard, leadCard) {
-				return fmt.Errorf("Invalid trick move: must follow suit")
+		intIndices := make([]int, len(indices))
+		for i, v := range indices {
+			if floatVal, ok := v.(float64); ok {
+				intIndices[i] = int(floatVal)
+			} else {
+				return fmt.Errorf("invalid index value")
 			}
 		}
 
-		g.TossCards(playerIndex, []int{indexToPlay})
-		fmt.Printf("Player %s played %v\n", g.Players[playerIndex].Name, playedCard)
+		playerIndex := g.getPlayerIndex(playerName)
+		if playerIndex == -1 {
+			return fmt.Errorf("player not found")
+		}
+
+		g.TossCards(playerIndex, intIndices)
+		newCards := g.Deck.DrawMultiple(len(intIndices))
+		g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
+		log.Printf("Player %s has new hand: %v\n", playerName, g.Players[playerIndex].Hand)
 
 	default:
-		return fmt.Errorf("Unknown move type: %s", moveType)
+		return fmt.Errorf("unknown move type: %s", moveType)
 	}
 
 	return nil
@@ -357,11 +308,10 @@ func isValidTrickMove(player *player.Player, playedCard cards.Card, leadCard car
 }
 
 func (g *Game) notifyServer(server *GameServer, msg Message) {
-	// Notify server to send message to the specific player
-	fmt.Print("Inside notify")
 
-	// Assuming server has a method to get the connection of a player
+	fmt.Println("I AM IN NOTIFTYSERVER \n")
 	playerConn := server.getPlayerConnection(msg.PlayerName)
+	encoder := json.NewEncoder(playerConn)
 	if playerConn == nil {
 		fmt.Printf("No connection found for player %s\n", msg.PlayerName)
 		return
@@ -373,10 +323,41 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 		fmt.Printf("Error marshaling message for player %s: %v\n", msg.PlayerName, err)
 		return
 	}
-	print(jsonData)
+
 	// Send the message over the player's connection
 	_, err = playerConn.Write(jsonData)
 	if err != nil {
 		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
+		return
 	}
+
+	// If this is a prompt for user input (NextTurn), wait for and handle the response
+	if msg.MoveType == NextTurn {
+
+		// Send the player's move back to the server
+		moveMsg := Message{
+			PlayerName: msg.PlayerName,
+			MoveType:   PokerToss,
+			Data:       response,
+		}
+		jsonData, err = json.Marshal(moveMsg)
+		fmt.Print("RESPONSE: ", jsonData, "\n")
+		if err != nil {
+			fmt.Printf("Error marshaling move message: %v\n", err)
+			return
+		}
+		err = encoder.Encode(jsonData)
+		if err != nil {
+			fmt.Printf("Failed to send move to server for player %s: %v\n", msg.PlayerName, err)
+		}
+	}
+}
+
+func (g *Game) getPlayerIndex(playerName string) int {
+	for i, p := range g.Players {
+		if p.Name == playerName {
+			return i
+		}
+	}
+	return -1
 }
