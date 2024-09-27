@@ -79,24 +79,9 @@ func (s *GameServer) handleConnection(c *Client) {
 		go s.Game.StartGame(s)
 	}
 
-	decoder := json.NewDecoder(c.conn)
 	for {
-		var msg Message
-		err := decoder.Decode(&msg)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Printf("Error decoding message: %v\n", err)
-			continue
-		}
-		fmt.Println("Attempting to process move: ", msg.Data)
-		err = s.Game.processMove(msg.PlayerName, msg.MoveType, msg.Data)
-		if err != nil {
-			log.Printf("Error processing move: %v\n", err)
-		}
+
 	}
-	delete(s.Clients, c)
 }
 
 func (c *Client) setUpUsername() string {

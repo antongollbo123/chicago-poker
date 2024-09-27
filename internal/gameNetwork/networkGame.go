@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/antongollbo123/chicago-poker/internal/deck"
@@ -138,7 +139,7 @@ func (g *Game) PokerRound(server *GameServer) {
 
 		// The actual processing of the move will happen in handleConnection
 		// We're just waiting here to ensure the round progresses properly
-		time.Sleep(time.Second * 5) // Adjust this timing as needed
+		time.Sleep(time.Second * 10) // Adjust this timing as needed
 	}
 	g.Round++
 }
@@ -262,38 +263,32 @@ func (g *Game) EvaluateHands() (int, game.HandEvaluation) {
 	return 0, game.HandEvaluation{}
 }
 
+func describe(i interface{}) {
+	fmt.Printf("(%v, %T)\n", i, i)
+}
+
 func (g *Game) processMove(playerName string, moveType MessageType, data interface{}) error {
 	log.Printf("Processing move: Player: %s, Type: %s, Data: %v\n", playerName, moveType, data)
 
-	switch moveType {
-	case PokerToss:
-		indices, ok := data.([]interface{})
-		if !ok {
-			return fmt.Errorf("invalid data format for poker_toss")
-		}
+	fmt.Print(moveType == "poker_toss")
+	fmt.Print(moveType == PokerToss)
+	describe(data)
 
-		intIndices := make([]int, len(indices))
-		for i, v := range indices {
-			if floatVal, ok := v.(float64); ok {
-				intIndices[i] = int(floatVal)
-			} else {
-				return fmt.Errorf("invalid index value")
-			}
-		}
-
-		playerIndex := g.getPlayerIndex(playerName)
-		if playerIndex == -1 {
-			return fmt.Errorf("player not found")
-		}
-
-		g.TossCards(playerIndex, intIndices)
-		newCards := g.Deck.DrawMultiple(len(intIndices))
-		g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
-		log.Printf("Player %s has new hand: %v\n", playerName, g.Players[playerIndex].Hand)
-
-	default:
-		return fmt.Errorf("unknown move type: %s", moveType)
+	intIndices, ok := data.([]int)
+	fmt.Print(intIndices)
+	if !ok {
+		return fmt.Errorf("invalid data format for poker_toss")
 	}
+
+	playerIndex := g.getPlayerIndex(playerName)
+	if playerIndex == -1 {
+		return fmt.Errorf("player not found")
+	}
+
+	g.TossCards(playerIndex, intIndices)
+	newCards := g.Deck.DrawMultiple(len(intIndices))
+	g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
+	log.Printf("Player %s has new hand: %v\n", playerName, g.Players[playerIndex].Hand)
 
 	return nil
 }
@@ -309,11 +304,24 @@ func isValidTrickMove(player *player.Player, playedCard cards.Card, leadCard car
 
 func (g *Game) notifyServer(server *GameServer, msg Message) {
 
-	fmt.Println("I AM IN NOTIFTYSERVER \n")
+	fmt.Println("I AM IN NOTIFYSERVER, MOVE TYPE: ", msg.MoveType)
 	playerConn := server.getPlayerConnection(msg.PlayerName)
-	encoder := json.NewEncoder(playerConn)
+
 	if playerConn == nil {
 		fmt.Printf("No connection found for player %s\n", msg.PlayerName)
+		return
+	}
+
+	if msg.MoveType == "next_turn" {
+		reader := bufio.NewReader(playerConn)
+		playerConn.Write([]byte("Enter your move: "))
+		content, _ := reader.ReadString('\n')
+		fmt.Print("THIS IS CONTENT: ", content)
+		content = strings.TrimSpace(content)
+		msg.MoveType = PokerToss
+		msg.Data = game.ParseInput(content)
+		fmt.Println(msg.Data)
+		g.processMove(msg.PlayerName, msg.MoveType, msg.Data)
 		return
 	}
 
@@ -325,31 +333,11 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 	}
 
 	// Send the message over the player's connection
+	playerConn.Write([]byte("JSON encoded message: "))
 	_, err = playerConn.Write(jsonData)
 	if err != nil {
 		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
 		return
-	}
-
-	// If this is a prompt for user input (NextTurn), wait for and handle the response
-	if msg.MoveType == NextTurn {
-
-		// Send the player's move back to the server
-		moveMsg := Message{
-			PlayerName: msg.PlayerName,
-			MoveType:   PokerToss,
-			Data:       response,
-		}
-		jsonData, err = json.Marshal(moveMsg)
-		fmt.Print("RESPONSE: ", jsonData, "\n")
-		if err != nil {
-			fmt.Printf("Error marshaling move message: %v\n", err)
-			return
-		}
-		err = encoder.Encode(jsonData)
-		if err != nil {
-			fmt.Printf("Failed to send move to server for player %s: %v\n", msg.PlayerName, err)
-		}
 	}
 }
 
