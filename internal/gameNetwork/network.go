@@ -74,8 +74,8 @@ func (s *GameServer) handleConnection(c *Client) {
 	s.Game.AddPlayer(c.player, s)
 	s.broadcastMessage([]byte(fmt.Sprintf("%s has joined the game.", playerName)))
 
-	if len(s.Game.Players) >= 1 {
-		s.broadcastMessage([]byte("Starting the game with 1 players!"))
+	if len(s.Game.Players) == 2 {
+		s.broadcastMessage([]byte("Starting the game with 2 players!"))
 		go s.Game.StartGame(s)
 	}
 

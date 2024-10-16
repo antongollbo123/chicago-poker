@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/antongollbo123/chicago-poker/internal/deck"
 	"github.com/antongollbo123/chicago-poker/internal/game"
@@ -92,7 +90,7 @@ func (g *Game) StartGame(server *GameServer) {
 		case Poker:
 			g.PokerRound(server)
 		case Trick:
-			g.TrickRound()
+			g.TrickRound(server)
 		}
 
 	}
@@ -132,40 +130,57 @@ func (g *Game) PokerRound(server *GameServer) {
 		// Ask for the player's move
 		promptMsg := Message{
 			PlayerName: player.Name,
-			MoveType:   NextTurn,
+			MoveType:   PokerToss,
 			Data:       "Enter the indices of the cards you want to toss, separated by spaces: ",
 		}
 		g.notifyServer(server, promptMsg)
 
-		// The actual processing of the move will happen in handleConnection
-		// We're just waiting here to ensure the round progresses properly
-		time.Sleep(time.Second * 10) // Adjust this timing as needed
 	}
+	bestPlayerIndex, bestHandEvaluation := g.EvaluateHands()
+	formattedMsg := fmt.Sprintf("Player %s wins the round with a %v of %v and gets %d points\n",
+		g.Players[bestPlayerIndex].Name,
+		bestHandEvaluation.Rank,
+		bestHandEvaluation.ScoreCards,
+		bestHandEvaluation.Score)
+	msgBytes := []byte(formattedMsg)
+	server.broadcastMessage(msgBytes)
 	g.Round++
+
+	if g.Round > 2 {
+		g.Stage = Trick
+	}
 }
 
-func (g *Game) TrickRound() {
-	fmt.Println("TRICK ROUND!")
-	scanner := bufio.NewScanner(os.Stdin)
+func (g *Game) TrickRound(server *GameServer) {
+	server.broadcastMessage([]byte("TRICK ROUND!"))
 	// Make copies of hands
 	bestPlayerIndex, bestHandEvaluation := g.EvaluateHands()
-
 	leadIndex := 0
 	for trick := 0; trick < 5; trick++ {
 		var leadCard cards.Card
 		playedCards := make([]cards.Card, len(g.Players))
 		indicesToRemove := make([][]int, len(g.Players))
 
-		fmt.Printf("Starting trick %d\n", trick+1)
-		for i := 0; i < len(g.Players); i++ {
-			currentIndex := (leadIndex + i) % len(g.Players)
-			player := g.Players[currentIndex]
+		formattedMsg := fmt.Sprintf("Starting trick %d\n", trick+1)
+		msgBytes := []byte(formattedMsg)
+		server.broadcastMessage(msgBytes)
 
-			fmt.Printf("Player %s, your hand is: %v\n", player.Name, player.Hand)
-			fmt.Printf("Enter the index of the card you want to play: ")
-			scanner.Scan()
-			input := scanner.Text()
-			indexToPlay := game.ParseInput(input)
+		for _, player := range g.Players {
+
+			handMsg := Message{
+				PlayerName: player.Name,
+				MoveType:   GameUpdate,
+				Data:       player.Hand,
+			}
+			g.notifyServer(server, handMsg)
+
+			// Ask for the player's move
+			promptMsg := Message{
+				PlayerName: player.Name,
+				MoveType:   TrickPlay,
+				Data:       "Enter the index of the card you want to play: ",
+			}
+			g.notifyServer(server, promptMsg)
 
 			if len(indexToPlay) != 1 || indexToPlay[0] < 0 || indexToPlay[0] >= len(player.Hand) {
 				fmt.Println("Invalid card index. Try again.")
@@ -277,7 +292,7 @@ func (g *Game) processMove(playerName string, moveType MessageType, data interfa
 	intIndices, ok := data.([]int)
 	fmt.Print(intIndices)
 	if !ok {
-		return fmt.Errorf("invalid data format for poker_toss")
+		return fmt.Errorf("invalid data format")
 	}
 
 	playerIndex := g.getPlayerIndex(playerName)
@@ -285,10 +300,16 @@ func (g *Game) processMove(playerName string, moveType MessageType, data interfa
 		return fmt.Errorf("player not found")
 	}
 
-	g.TossCards(playerIndex, intIndices)
-	newCards := g.Deck.DrawMultiple(len(intIndices))
-	g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
-	log.Printf("Player %s has new hand: %v\n", playerName, g.Players[playerIndex].Hand)
+	if moveType == "poker_toss" {
+		g.TossCards(playerIndex, intIndices)
+		newCards := g.Deck.DrawMultiple(len(intIndices))
+		g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
+		log.Printf("Player %s has new hand: %v\n", playerName, g.Players[playerIndex].Hand)
+	} else if moveType == "trick_play" {
+		playerIndex := g.getPlayerIndex(playerName)
+		isValidTrickMove(g.Players[playerIndex])
+
+	}
 
 	return nil
 }
@@ -312,17 +333,27 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 		return
 	}
 
-	if msg.MoveType == "next_turn" {
+	if msg.MoveType == "poker_toss" {
 		reader := bufio.NewReader(playerConn)
 		playerConn.Write([]byte("Enter your move: "))
 		content, _ := reader.ReadString('\n')
-		fmt.Print("THIS IS CONTENT: ", content)
 		content = strings.TrimSpace(content)
-		msg.MoveType = PokerToss
+		msg.MoveType = PokerToss // TODO: Redundant ? --> Remove?
 		msg.Data = game.ParseInput(content)
 		fmt.Println(msg.Data)
 		g.processMove(msg.PlayerName, msg.MoveType, msg.Data)
 		return
+	}
+
+	if msg.MoveType == "trick_play" {
+		reader := bufio.NewReader(playerConn)
+		playerConn.Write([]byte("Enter your move: "))
+		content, _ := reader.ReadString('\n')
+		content = strings.TrimSpace(content)
+		game.ParseInput(content)
+
+		fmt.Println(msg.Data)
+		g.processMove(msg.PlayerName, msg.MoveType, msg.Data)
 	}
 
 	// Marshal the message to JSON
