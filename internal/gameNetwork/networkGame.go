@@ -165,8 +165,8 @@ func (g *Game) TrickRound(server *GameServer) {
 		msgBytes := []byte(formattedMsg)
 		server.broadcastMessage(msgBytes)
 
-		for _, player := range g.Players {
-
+		for idx, player := range g.Players {
+			currentIndex := (leadIndex + idx) % len(g.Players)
 			handMsg := Message{
 				PlayerName: player.Name,
 				MoveType:   GameUpdate,
@@ -180,22 +180,22 @@ func (g *Game) TrickRound(server *GameServer) {
 				MoveType:   TrickPlay,
 				Data:       "Enter the index of the card you want to play: ",
 			}
-			g.notifyServer(server, promptMsg)
-
+			indexToPlay := g.notifyServer(server, promptMsg)
+			fmt.Println("index to play: ", indexToPlay[0])
 			if len(indexToPlay) != 1 || indexToPlay[0] < 0 || indexToPlay[0] >= len(player.Hand) {
 				fmt.Println("Invalid card index. Try again.")
-				i-- // Ask the same player to play again
+				idx-- // Ask the same player to play again
 				continue
 			}
 
 			playedCard := player.Hand[indexToPlay[0]]
 
-			if i == 0 {
+			if idx == 0 {
 				leadCard = playedCard
 			} else {
 				if playedCard.Suit != leadCard.Suit && hasSuit(player.Hand, leadCard.Suit) {
 					fmt.Println("You must follow the suit. Try again.")
-					i-- // Ask the same player to play again
+					idx-- // Ask the same player to play again
 					continue
 				}
 			}
@@ -305,12 +305,16 @@ func (g *Game) processMove(playerName string, moveType MessageType, data interfa
 		newCards := g.Deck.DrawMultiple(len(intIndices))
 		g.Players[playerIndex].Hand = append(g.Players[playerIndex].Hand, newCards...)
 		log.Printf("Player %s has new hand: %v\n", playerName, g.Players[playerIndex].Hand)
-	} else if moveType == "trick_play" {
-		playerIndex := g.getPlayerIndex(playerName)
-		isValidTrickMove(g.Players[playerIndex])
-
 	}
+	return nil
+}
 
+func (g *Game) processTrickMove(moveType MessageType, data interface{}) []int {
+	if moveType == "trick_play" {
+		intIndices, _ := data.([]int)
+		fmt.Println("intindices in processTrickMove", intIndices)
+		return intIndices
+	}
 	return nil
 }
 
@@ -323,14 +327,14 @@ func isValidTrickMove(player *player.Player, playedCard cards.Card, leadCard car
 	return hasSuit(player.Hand, leadCard.Suit)
 }
 
-func (g *Game) notifyServer(server *GameServer, msg Message) {
+func (g *Game) notifyServer(server *GameServer, msg Message) []int {
 
 	fmt.Println("I AM IN NOTIFYSERVER, MOVE TYPE: ", msg.MoveType)
 	playerConn := server.getPlayerConnection(msg.PlayerName)
 
 	if playerConn == nil {
 		fmt.Printf("No connection found for player %s\n", msg.PlayerName)
-		return
+		return nil
 	}
 
 	if msg.MoveType == "poker_toss" {
@@ -342,7 +346,7 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 		msg.Data = game.ParseInput(content)
 		fmt.Println(msg.Data)
 		g.processMove(msg.PlayerName, msg.MoveType, msg.Data)
-		return
+		return game.ParseInput(content)
 	}
 
 	if msg.MoveType == "trick_play" {
@@ -350,17 +354,18 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 		playerConn.Write([]byte("Enter your move: "))
 		content, _ := reader.ReadString('\n')
 		content = strings.TrimSpace(content)
-		game.ParseInput(content)
-
+		parsedCardIndex := game.ParseInput(content)
+		msg.Data = parsedCardIndex
 		fmt.Println(msg.Data)
-		g.processMove(msg.PlayerName, msg.MoveType, msg.Data)
+		trickIndex := g.processTrickMove(msg.MoveType, msg.Data)
+		return trickIndex
 	}
 
 	// Marshal the message to JSON
 	jsonData, err := json.Marshal(msg)
 	if err != nil {
 		fmt.Printf("Error marshaling message for player %s: %v\n", msg.PlayerName, err)
-		return
+		return nil
 	}
 
 	// Send the message over the player's connection
@@ -368,8 +373,9 @@ func (g *Game) notifyServer(server *GameServer, msg Message) {
 	_, err = playerConn.Write(jsonData)
 	if err != nil {
 		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
-		return
+		return nil
 	}
+	return nil
 }
 
 func (g *Game) getPlayerIndex(playerName string) int {
