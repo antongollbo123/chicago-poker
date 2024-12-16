@@ -153,77 +153,77 @@ func (g *Game) PokerRound(server *GameServer) {
 
 func (g *Game) TrickRound(server *GameServer) {
 	server.broadcastMessage([]byte("TRICK ROUND!"))
-	// Make copies of hands
-	bestPlayerIndex, bestHandEvaluation := g.EvaluateHands()
-	leadIndex := 0
+	leadIndex := g.leadIndex
+
 	for trick := 0; trick < 5; trick++ {
 		var leadCard cards.Card
 		playedCards := make([]cards.Card, len(g.Players))
-		indicesToRemove := make([][]int, len(g.Players))
+		indicesToRemove := make([]int, len(g.Players))
 
-		formattedMsg := fmt.Sprintf("Starting trick %d\n", trick+1)
-		msgBytes := []byte(formattedMsg)
-		server.broadcastMessage(msgBytes)
+		server.broadcastMessage([]byte(fmt.Sprintf("Starting trick %d\n", trick+1)))
 
-		for idx, player := range g.Players {
-			currentIndex := (leadIndex + idx) % len(g.Players)
+		for i := 0; i < len(g.Players); i++ {
+			playerIndex := (leadIndex + i) % len(g.Players)
+			currentPlayer := g.Players[playerIndex]
+
+			// Notify player of their hand
 			handMsg := Message{
-				PlayerName: player.Name,
+				PlayerName: currentPlayer.Name,
 				MoveType:   GameUpdate,
-				Data:       player.Hand,
+				Data:       currentPlayer.Hand,
 			}
 			g.notifyServer(server, handMsg)
 
 			// Ask for the player's move
 			promptMsg := Message{
-				PlayerName: player.Name,
+				PlayerName: currentPlayer.Name,
 				MoveType:   TrickPlay,
 				Data:       "Enter the index of the card you want to play: ",
 			}
-			indexToPlay := g.notifyServer(server, promptMsg)
-			fmt.Println("index to play: ", indexToPlay[0])
-			if len(indexToPlay) != 1 || indexToPlay[0] < 0 || indexToPlay[0] >= len(player.Hand) {
+			cardIndex := g.notifyServer(server, promptMsg)
+
+			if len(cardIndex) != 1 {
 				fmt.Println("Invalid card index. Try again.")
-				idx-- // Ask the same player to play again
+				i-- // Retry for the same player
 				continue
 			}
 
-			playedCard := player.Hand[indexToPlay[0]]
+			playedCard := currentPlayer.Hand[cardIndex[0]]
 
-			if idx == 0 {
-				leadCard = playedCard
-			} else {
-				if playedCard.Suit != leadCard.Suit && hasSuit(player.Hand, leadCard.Suit) {
-					fmt.Println("You must follow the suit. Try again.")
-					idx-- // Ask the same player to play again
-					continue
-				}
+			if i == 0 {
+				leadCard = playedCard // Set the lead card for the trick
+			} else if !isValidTrickMove(currentPlayer, playedCard, leadCard) {
+				fmt.Println("Invalid move. You must follow the suit if possible.")
+				i-- // Retry for the same player
+				continue
 			}
 
-			playedCards[currentIndex] = playedCard
-			indicesToRemove[currentIndex] = []int{indexToPlay[0]}
-			fmt.Printf("Player %s played %v\n", player.Name, playedCard)
+			playedCards[playerIndex] = playedCard
+			indicesToRemove[playerIndex] = cardIndex[0]
+
+			fmt.Printf("Player %s played %v\n", currentPlayer.Name, playedCard)
 		}
 
 		winnerIndex := findWinner(playedCards, leadIndex)
 		fmt.Printf("Player %s wins the trick with %v\n", g.Players[winnerIndex].Name, playedCards[winnerIndex])
 
-		// Remove played cards from players' hands using TossCards
-		for i := range indicesToRemove {
-			if len(indicesToRemove[i]) > 0 {
-				g.TossCards(i, indicesToRemove[i])
+		// Remove played cards
+		for playerIdx, cardIdx := range indicesToRemove {
+			if cardIdx >= 0 {
+				g.TossCards(playerIdx, []int{cardIdx})
 			}
 		}
 
-		leadIndex = winnerIndex
+		leadIndex = winnerIndex // Update lead index for the next trick
 	}
-	// Award points to the player who wins the last trick
+
+	// Award points to the player who wins the final trick
 	g.Players[leadIndex].Score += TrickWin
 	g.Round++
 	fmt.Printf("Player %s wins the trick round and gets %d points\n", g.Players[leadIndex].Name, TrickWin)
-	g.Stage = Poker
+
+	g.Stage = Poker // Switch back to Poker round
 	g.Deal()
-	fmt.Printf("Player %s wins the final poker round with a %v of %v and gets %d points\n", g.Players[bestPlayerIndex].Name, bestHandEvaluation.Rank, bestHandEvaluation.ScoreCards, bestHandEvaluation.Score)
 }
 
 // Check if a player has a card of a given suit
@@ -319,12 +319,13 @@ func (g *Game) processTrickMove(moveType MessageType, data interface{}) []int {
 }
 
 func isValidTrickMove(player *player.Player, playedCard cards.Card, leadCard cards.Card) bool {
-	// If the played card matches the lead suit, it's valid
-	if playedCard.Suit == leadCard.Suit {
-		return true
-	}
 	// Check if the player has a card of the lead suit
-	return hasSuit(player.Hand, leadCard.Suit)
+	if hasSuit(player.Hand, leadCard.Suit) {
+		// If the played card matches the lead suit, it's valid
+		return playedCard.Suit == leadCard.Suit
+	}
+	// If the player does not have the lead suit, any card is valid
+	return true
 }
 
 func (g *Game) notifyServer(server *GameServer, msg Message) []int {
@@ -351,14 +352,23 @@ func (g *Game) notifyServer(server *GameServer, msg Message) []int {
 
 	if msg.MoveType == "trick_play" {
 		reader := bufio.NewReader(playerConn)
-		playerConn.Write([]byte("Enter your move: "))
+		playerConn.Write([]byte("Enter your move (single card index): "))
 		content, _ := reader.ReadString('\n')
 		content = strings.TrimSpace(content)
+
 		parsedCardIndex := game.ParseInput(content)
+		if len(parsedCardIndex) != 1 {
+			fmt.Println("Invalid input. Please enter a single valid card index.")
+			return nil
+		}
+
+		if parsedCardIndex[0] < 0 || parsedCardIndex[0] >= len(g.Players[g.getPlayerIndex(msg.PlayerName)].Hand) {
+			fmt.Println("Index out of range. Try again.")
+			return nil
+		}
+
 		msg.Data = parsedCardIndex
-		fmt.Println(msg.Data)
-		trickIndex := g.processTrickMove(msg.MoveType, msg.Data)
-		return trickIndex
+		return parsedCardIndex
 	}
 
 	// Marshal the message to JSON
