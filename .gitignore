@@ -1,0 +1,17 @@
+# Binaries
+chicago-poker
+
+# Logs
+*.log
+server.log
+player*.log
+test_server.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store

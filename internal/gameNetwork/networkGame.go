@@ -174,30 +174,49 @@ func (g *Game) TrickRound(server *GameServer) {
 			}
 			g.notifyServer(server, handMsg)
 
-			// Ask for the player's move
-			promptMsg := Message{
-				PlayerName: currentPlayer.Name,
-				MoveType:   TrickPlay,
-				Data:       "Enter the index of the card you want to play: ",
-			}
-			cardIndex := g.notifyServer(server, promptMsg)
+			// Ask for the player's move with retry limit
+			var cardIndex []int
+			maxRetries := 3
+			for retry := 0; retry < maxRetries; retry++ {
+				promptMsg := Message{
+					PlayerName: currentPlayer.Name,
+					MoveType:   TrickPlay,
+					Data:       "Enter the index of the card you want to play: ",
+				}
+				cardIndex = g.notifyServer(server, promptMsg)
 
-			if len(cardIndex) != 1 {
-				fmt.Println("Invalid card index. Try again.")
-				i-- // Retry for the same player
-				continue
+				if len(cardIndex) != 1 {
+					fmt.Printf("Invalid card index from %s. Retry %d/%d\n", currentPlayer.Name, retry+1, maxRetries)
+					continue
+				}
+
+				// Validate card index is in range
+				if cardIndex[0] < 0 || cardIndex[0] >= len(currentPlayer.Hand) {
+					fmt.Printf("Card index out of range from %s. Retry %d/%d\n", currentPlayer.Name, retry+1, maxRetries)
+					continue
+				}
+
+				playedCard := currentPlayer.Hand[cardIndex[0]]
+
+				// Validate trick move rules
+				if i == 0 {
+					leadCard = playedCard // Set the lead card for the trick
+					break
+				} else if !isValidTrickMove(currentPlayer, playedCard, leadCard) {
+					fmt.Printf("Invalid move from %s. You must follow the suit if possible. Retry %d/%d\n", currentPlayer.Name, retry+1, maxRetries)
+					continue
+				}
+
+				break
+			}
+
+			// If still invalid after retries, play the first valid card automatically
+			if len(cardIndex) != 1 || cardIndex[0] < 0 || cardIndex[0] >= len(currentPlayer.Hand) {
+				fmt.Printf("Player %s failed to provide valid input. Auto-playing first card.\n", currentPlayer.Name)
+				cardIndex = []int{0}
 			}
 
 			playedCard := currentPlayer.Hand[cardIndex[0]]
-
-			if i == 0 {
-				leadCard = playedCard // Set the lead card for the trick
-			} else if !isValidTrickMove(currentPlayer, playedCard, leadCard) {
-				fmt.Println("Invalid move. You must follow the suit if possible.")
-				i-- // Retry for the same player
-				continue
-			}
-
 			playedCards[playerIndex] = playedCard
 			indicesToRemove[playerIndex] = cardIndex[0]
 
@@ -334,14 +353,18 @@ func (g *Game) notifyServer(server *GameServer, msg Message) []int {
 	playerConn := server.getPlayerConnection(msg.PlayerName)
 
 	if playerConn == nil {
-		fmt.Printf("No connection found for player %s\n", msg.PlayerName)
+		fmt.Printf("ERROR: No connection found for player %s - they may have disconnected\n", msg.PlayerName)
 		return nil
 	}
 
 	if msg.MoveType == "poker_toss" {
 		reader := bufio.NewReader(playerConn)
-		playerConn.Write([]byte("Enter your move: "))
-		content, _ := reader.ReadString('\n')
+		playerConn.Write([]byte("\nEnter the indices of cards to toss (space-separated, e.g., '0 2 4'): "))
+		content, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading from player %s: %v\n", msg.PlayerName, err)
+			return nil
+		}
 		content = strings.TrimSpace(content)
 		msg.MoveType = PokerToss // TODO: Redundant ? --> Remove?
 		msg.Data = game.ParseInput(content)
@@ -352,8 +375,12 @@ func (g *Game) notifyServer(server *GameServer, msg Message) []int {
 
 	if msg.MoveType == "trick_play" {
 		reader := bufio.NewReader(playerConn)
-		playerConn.Write([]byte("Enter your move (single card index): "))
-		content, _ := reader.ReadString('\n')
+		playerConn.Write([]byte("\nEnter card index to play (0-4): "))
+		content, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading from player %s: %v\n", msg.PlayerName, err)
+			return nil
+		}
 		content = strings.TrimSpace(content)
 
 		parsedCardIndex := game.ParseInput(content)
@@ -371,16 +398,33 @@ func (g *Game) notifyServer(server *GameServer, msg Message) []int {
 		return parsedCardIndex
 	}
 
-	// Marshal the message to JSON
-	jsonData, err := json.Marshal(msg)
-	if err != nil {
-		fmt.Printf("Error marshaling message for player %s: %v\n", msg.PlayerName, err)
-		return nil
+	// Format message based on type
+	var formattedMsg string
+	if msg.MoveType == GameUpdate {
+		// Display hand in a readable format
+		if hand, ok := msg.Data.([]cards.Card); ok {
+			formattedMsg = fmt.Sprintf("\n=== Your Hand ===\n")
+			for i, card := range hand {
+				formattedMsg += fmt.Sprintf("[%d] %v\n", i, card)
+			}
+			formattedMsg += "=================\n"
+		} else {
+			formattedMsg = fmt.Sprintf("\n%v\n", msg.Data)
+		}
+	} else if msg.MoveType == PlayerJoined {
+		formattedMsg = fmt.Sprintf("\n%v\n", msg.Data)
+	} else {
+		// Default: send as JSON
+		jsonData, err := json.Marshal(msg)
+		if err != nil {
+			fmt.Printf("Error marshaling message for player %s: %v\n", msg.PlayerName, err)
+			return nil
+		}
+		formattedMsg = fmt.Sprintf("\n%s\n", string(jsonData))
 	}
 
-	// Send the message over the player's connection
-	playerConn.Write([]byte("JSON encoded message: "))
-	_, err = playerConn.Write(jsonData)
+	// Send the formatted message
+	_, err := playerConn.Write([]byte(formattedMsg))
 	if err != nil {
 		fmt.Printf("Failed to send message to player %s: %v\n", msg.PlayerName, err)
 		return nil

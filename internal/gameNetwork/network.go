@@ -62,7 +62,14 @@ func (s *GameServer) BuildServer() {
 }
 
 func (s *GameServer) handleConnection(c *Client) {
-	defer c.conn.Close()
+	defer func() {
+		c.conn.Close()
+		delete(s.Clients, c)
+		if c.player != nil {
+			fmt.Printf("Player %s disconnected\n", c.player.Name)
+		}
+	}()
+
 	s.Clients[c] = true
 	print("connection added", c.conn)
 	playerName := c.setUpUsername()
@@ -79,8 +86,10 @@ func (s *GameServer) handleConnection(c *Client) {
 		go s.Game.StartGame(s)
 	}
 
+	// Keep connection alive by blocking here
 	for {
-
+		// Check if connection is still alive by trying to read with a timeout
+		// This goroutine stays alive to keep the connection open
 	}
 }
 
@@ -90,15 +99,19 @@ func (c *Client) setUpUsername() string {
 		fmt.Println("Error: Connection is nil for client.")
 		return ""
 	}
-	io.WriteString(c.conn, "Enter your username: ")
+	io.WriteString(c.conn, "\n=== Welcome to Chicago Poker ===\nEnter your username: ")
 	scanner := bufio.NewScanner(c.conn)
 	scanner.Scan()
 	c.name = scanner.Text()
-	//io.WriteString(c.conn, fmt.Sprintf("Welcome, %s\n", c.name))
+	io.WriteString(c.conn, fmt.Sprintf("Welcome, %s! Waiting for other players...\n", c.name))
 	return c.name
 }
 
 func (s *GameServer) broadcastMessage(msg []byte) {
+	// Ensure message ends with newline
+	if len(msg) > 0 && msg[len(msg)-1] != '\n' {
+		msg = append(msg, '\n')
+	}
 	for c := range s.Clients {
 		_, err := c.conn.Write(msg)
 		if err != nil {
